@@ -23,13 +23,23 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type Param struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type Step struct {
+	Name   string  `json:"name"`
+	Params []Param `json:"params,omitempty"`
+}
+
 // TaskSpec defines the desired state of Task
 type TaskSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of Task. Edit Task_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Steps []Step `json:"steps"`
 }
 
 // TaskStatus defines the observed state of Task

@@ -6,5 +6,5 @@ metadata:
 spec:
   repository:
     name: local-backups
-  task: backup-pvc
+  task: task-backup-pv
   schedule: "*/5 * * * *"
