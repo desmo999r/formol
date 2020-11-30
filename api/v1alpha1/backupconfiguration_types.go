@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,6 +29,12 @@ type Repository struct {
 	Name string `json:"name"`
 }
 
+type Target struct {
+	ApiVersion string `json:"apiVersion"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+}
+
 // BackupConfigurationSpec defines the desired state of BackupConfiguration
 type BackupConfigurationSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -37,6 +44,9 @@ type BackupConfigurationSpec struct {
 	Repository `json:"repository"`
 	Task       string `json:"task,omitempty"`
 	Schedule   string `json:"schedule"`
+	Target     `json:"target"`
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
 	// +optional
 	Suspend *bool `json:"suspend,omitempty"`
 }

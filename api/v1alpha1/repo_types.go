@@ -23,45 +23,53 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type Ref struct {
-	Name string `json:"name"`
+type S3 struct {
+	Server string `json:"server"`
+	Bucket string `json:"bucket"`
+	// +optional
+	Prefix string `json:"prefix,omitempty"`
 }
 
-// BackupSessionSpec defines the desired state of BackupSession
-type BackupSessionSpec struct {
+type Backend struct {
+	S3 `json:"s3"`
+}
+
+// RepoSpec defines the desired state of Repo
+type RepoSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of BackupSession. Edit BackupSession_types.go to remove/update
-	Ref `json:"ref"`
+	// Foo is an example field of Repo. Edit Repo_types.go to remove/update
+	Backend           `json:"backend"`
+	RepositorySecrets string `json:"repositorySecrets"`
 }
 
-// BackupSessionStatus defines the observed state of BackupSession
-type BackupSessionStatus struct {
+// RepoStatus defines the observed state of Repo
+type RepoStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // +kubebuilder:object:root=true
 
-// BackupSession is the Schema for the backupsessions API
-type BackupSession struct {
+// Repo is the Schema for the repoes API
+type Repo struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BackupSessionSpec   `json:"spec,omitempty"`
-	Status BackupSessionStatus `json:"status,omitempty"`
+	Spec   RepoSpec   `json:"spec,omitempty"`
+	Status RepoStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// BackupSessionList contains a list of BackupSession
-type BackupSessionList struct {
+// RepoList contains a list of Repo
+type RepoList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []BackupSession `json:"items"`
+	Items           []Repo `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&BackupSession{}, &BackupSessionList{})
+	SchemeBuilder.Register(&Repo{}, &RepoList{})
 }
