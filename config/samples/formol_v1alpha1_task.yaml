@@ -1,9 +1,9 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: Task
 metadata:
-  name: task-backup-pv
+  name: task-backup-pvc
   namespace: backup
 spec:
   steps:
-    - name: function-backup-pv
+    - name: function-backup-pvc
 

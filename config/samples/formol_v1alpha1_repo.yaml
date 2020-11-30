@@ -1,0 +1,11 @@
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Repo
+metadata:
+  name: repo-minio
+  namespace: backup
+spec:
+  backend:
+    s3:
+      server: raid5.desmojim.fr:9000
+      bucket: testbucket2
+  repositorySecrets: secret-minio

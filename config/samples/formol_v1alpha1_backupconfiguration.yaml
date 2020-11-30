@@ -1,10 +1,15 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: BackupConfiguration
 metadata:
-  name: backupconfiguration-sample
-  namespace: default
+  name: backupconf-nginx
 spec:
   repository:
-    name: local-backups
-  task: task-backup-pv
+    name: repo-minio
   schedule: "*/5 * * * *"
+  target:
+    apiVersion: v1
+    kind: Deployment
+    name: nginx-deployment
+  volumeMounts:
+    - name: empty
+      mountPath: /data

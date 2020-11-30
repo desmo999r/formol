@@ -1,11 +1,11 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: Function
 metadata:
-  name: function-backup-pv
+  name: function-backup-pvc
   namespace: backup
 spec:
-  name: function-backup-pv
+  name: function-backup-pvc
   image: desmo999r/formolcli
   args:
     - backup
-    - pvc
+    - volume

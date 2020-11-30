@@ -1,10 +1,9 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: BackupSession
 metadata:
-  name: backupsession-sample
-  namespace: default
+  name: backupsession-mail
+  namespace: mailserver
 spec:
   # Add fields here
   ref:
-    namespace: default
-    name: backupconfiguration-sample
+    name: backupconf-mail
