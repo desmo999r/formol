@@ -23,6 +23,15 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type BackupSessionState string
+
+const (
+	New      BackupSessionState = "New"
+	Starting BackupSessionState = "Starting"
+	Running  BackupSessionState = "Running"
+	Done     BackupSessionState = "Done"
+)
+
 type Ref struct {
 	Name string `json:"name"`
 }
@@ -40,6 +49,14 @@ type BackupSessionSpec struct {
 type BackupSessionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	// +optional
+	BackupSessionState `json:"state,omitempty"`
+	// +optional
+	SnapshotId string `json:"snapshotId,omitempty"`
+	// +optional
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+	// +optional
+	EndTime *metav1.Time `json:"endTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
