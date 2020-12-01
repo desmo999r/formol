@@ -112,8 +112,8 @@ func (in *BackupConfigurationSpec) DeepCopyInto(out *BackupConfigurationSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.Path != nil {
-		in, out := &in.Path, &out.Path
+	if in.Paths != nil {
+		in, out := &in.Paths, &out.Paths
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
