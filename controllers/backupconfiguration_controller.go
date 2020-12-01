@@ -45,15 +45,23 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	log := r.Log.WithValues("Repository", backupConf.Spec.Repository.Name)
 	repo := &formolv1alpha1.Repo{}
 	sidecar := corev1.Container{
-		Name:    "backup",
-		Image:   "busybox",
-		Command: []string{"sh", "-c", "echo Toto; sleep 3600"},
+		Name:  "backup",
+		Image: "desmo999r/formolcli:latest",
+		Args:  []string{"create", "server"},
 		Env: []corev1.EnvVar{
 			corev1.EnvVar{
 				Name: "POD_NAME",
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{
 						FieldPath: "metadata.name",
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "POD_NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.namespace",
 					},
 				},
 			},
