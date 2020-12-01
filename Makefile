@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= desmo999r/formolcontroller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -56,11 +56,11 @@ generate: controller-gen
 
 # Build the docker image
 docker-build: test
-	docker build . -t ${IMG}
+	podman build --disable-compression --format=docker . -t ${IMG}
 
 # Push the docker image
 docker-push:
-	docker push ${IMG}
+	podman push ${IMG}
 
 # find or download controller-gen
 # download controller-gen if necessary
