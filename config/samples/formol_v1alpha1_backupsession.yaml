@@ -1,9 +1,8 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: BackupSession
 metadata:
-  name: backupsession-mail
-  namespace: mailserver
+  name: backupsession-nginx
 spec:
   # Add fields here
   ref:
-    name: backupconf-mail
+    name: backupconf-nginx
