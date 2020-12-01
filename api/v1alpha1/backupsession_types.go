@@ -55,7 +55,7 @@ type BackupSessionStatus struct {
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
-	Duration *metav1.Time `json:"duration,omitempty"`
+	Duration *metav1.Duration `json:"duration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
