@@ -47,7 +47,7 @@ type BackupConfigurationSpec struct {
 	Target     `json:"target"`
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
-	Path         []string             `json:"paths"`
+	Paths        []string             `json:"paths"`
 	// +optional
 	Suspend *bool `json:"suspend,omitempty"`
 }
