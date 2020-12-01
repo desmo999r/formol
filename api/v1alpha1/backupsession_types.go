@@ -26,10 +26,9 @@ import (
 type BackupSessionState string
 
 const (
-	New      BackupSessionState = "New"
-	Starting BackupSessionState = "Starting"
-	Running  BackupSessionState = "Running"
-	Done     BackupSessionState = "Done"
+	New     BackupSessionState = "New"
+	Running BackupSessionState = "Running"
+	Done    BackupSessionState = "Done"
 )
 
 type Ref struct {
@@ -56,7 +55,7 @@ type BackupSessionStatus struct {
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
-	EndTime *metav1.Time `json:"endTime,omitempty"`
+	Duration *metav1.Time `json:"duration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
