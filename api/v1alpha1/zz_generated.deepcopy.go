@@ -22,6 +22,7 @@ package v1alpha1
 
 import (
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -242,7 +243,8 @@ func (in *BackupSessionStatus) DeepCopyInto(out *BackupSessionStatus) {
 	}
 	if in.Duration != nil {
 		in, out := &in.Duration, &out.Duration
-		*out = (*in).DeepCopy()
+		*out = new(metav1.Duration)
+		**out = **in
 	}
 }
 

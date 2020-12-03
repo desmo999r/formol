@@ -26,9 +26,9 @@ import (
 type BackupSessionState string
 
 const (
-	New     BackupSessionState = "New"
 	Running BackupSessionState = "Running"
-	Done    BackupSessionState = "Done"
+	Success BackupSessionState = "Success"
+	Failure BackupSessionState = "Failure"
 )
 
 type Ref struct {
@@ -59,6 +59,7 @@ type BackupSessionStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // BackupSession is the Schema for the backupsessions API
 type BackupSession struct {

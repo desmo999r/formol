@@ -40,6 +40,10 @@ type BackupConfigurationReconciler struct {
 
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupconfigurations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupconfigurations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=formol.desmojim.fr,resources=repoes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=cronjobs/status,verbs=get
 
 func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration) error {
 	log := r.Log.WithValues("Repository", backupConf.Spec.Repository.Name)

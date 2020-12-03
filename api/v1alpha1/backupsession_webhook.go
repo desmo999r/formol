@@ -27,6 +27,7 @@ import (
 var backupsessionlog = logf.Log.WithName("backupsession-resource")
 
 func (r *BackupSession) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	backupsessionlog.Info("setupWebhook", "name", r.Name)
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
 		Complete()
@@ -34,7 +35,7 @@ func (r *BackupSession) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
-// +kubebuilder:webhook:path=/mutate-formol-desmojim-fr-desmojim-fr-v1alpha1-backupsession,mutating=true,failurePolicy=fail,groups=formol.desmojim.fr.desmojim.fr,resources=backupsessions,verbs=create;update,versions=v1alpha1,name=mbackupsession.kb.io
+// +kubebuilder:webhook:path=/mutate-formol-desmojim-fr-v1alpha1-backupsession,mutating=true,failurePolicy=fail,groups=formol.desmojim.fr,resources=backupsessions,verbs=create;update,versions=v1alpha1,name=mbackupsession.kb.io
 
 var _ webhook.Defaulter = &BackupSession{}
 
@@ -43,11 +44,10 @@ func (r *BackupSession) Default() {
 	backupsessionlog.Info("default", "name", r.Name)
 
 	// TODO(user): fill in your defaulting logic.
-	r.Status.BackupSessionState = New
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// +kubebuilder:webhook:verbs=create;update,path=/validate-formol-desmojim-fr-desmojim-fr-v1alpha1-backupsession,mutating=false,failurePolicy=fail,groups=formol.desmojim.fr.desmojim.fr,resources=backupsessions,versions=v1alpha1,name=vbackupsession.kb.io
+// +kubebuilder:webhook:verbs=create;update,path=/validate-formol-desmojim-fr-v1alpha1-backupsession,mutating=false,failurePolicy=fail,groups=formol.desmojim.fr,resources=backupsessions,versions=v1alpha1,name=vbackupsession.kb.io
 
 var _ webhook.Validator = &BackupSession{}
 

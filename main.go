@@ -82,9 +82,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "BackupSession")
 		os.Exit(1)
 	}
-	if err = (&formolv1alpha1.BackupSession{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "BackupSession")
-		os.Exit(1)
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = (&formolv1alpha1.BackupSession{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "BackupSession")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
