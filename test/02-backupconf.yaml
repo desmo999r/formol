@@ -1,0 +1,20 @@
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: BackupConfiguration
+metadata:
+  name: backupconf-demo
+  namespace: demo
+spec:
+  repository:
+    name: repo-minio
+  schedule: "*/1 * * * *"
+  target:
+    apiVersion: v1
+    kind: Deployment
+    name: nginx-deployment
+  volumeMounts:
+    - name: demo-data
+      mountPath: /data
+  paths:
+    - /data
+
