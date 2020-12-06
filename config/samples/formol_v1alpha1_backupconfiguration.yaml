@@ -5,7 +5,7 @@ metadata:
 spec:
   repository:
     name: repo-minio
-  schedule: "*/5 * * * *"
+  schedule: "*/1 * * * *"
   target:
     apiVersion: v1
     kind: Deployment

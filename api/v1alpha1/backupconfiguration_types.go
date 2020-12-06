@@ -57,10 +57,13 @@ type BackupConfigurationStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
-	Suspended      *bool        `json:"suspended"`
+	Suspended      bool         `json:"suspended"`
+	ActiveCronJob  bool         `json:"activeCronJob"`
+	ActiveSidecar  bool         `json:"activeSidecar"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // BackupConfiguration is the Schema for the backupconfigurations API
 type BackupConfiguration struct {
