@@ -74,14 +74,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "BackupConfiguration")
 		os.Exit(1)
 	}
-	if err = (&controllers.BackupSessionReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("BackupSession"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "BackupSession")
-		os.Exit(1)
-	}
+	//	if err = (&controllers.BackupSessionReconciler{
+	//		Client: mgr.GetClient(),
+	//		Log:    ctrl.Log.WithName("controllers").WithName("BackupSession"),
+	//		Scheme: mgr.GetScheme(),
+	//	}).SetupWithManager(mgr); err != nil {
+	//		setupLog.Error(err, "unable to create controller", "controller", "BackupSession")
+	//		os.Exit(1)
+	//	}
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err = (&formolv1alpha1.BackupSession{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "BackupSession")

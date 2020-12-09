@@ -19,17 +19,20 @@ package controllers
 import (
 	"context"
 
+	formolrbac "github.com/desmo999r/formol/pkg/rbac"
+	formolutils "github.com/desmo999r/formol/pkg/utils"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	kbatch_beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	//	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 )
@@ -41,6 +44,16 @@ type BackupConfigurationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+func (r *BackupConfigurationReconciler) getDeployment(namespace string, name string) (*appsv1.Deployment, error) {
+
+	deployment := &appsv1.Deployment{}
+	err := r.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, deployment)
+	return deployment, err
+}
+
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupconfigurations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupconfigurations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=repoes,verbs=get;list;watch
@@ -49,23 +62,65 @@ type BackupConfigurationReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=cronjobs/status,verbs=get
 
-func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration) error {
-	log := r.Log.WithValues("backupconf", backupConf.Name)
-	getDeployment := func() (*appsv1.Deployment, error) {
-		deployment := &appsv1.Deployment{}
-		err := r.Get(context.Background(), client.ObjectKey{
-			Namespace: backupConf.Namespace,
-			Name:      backupConf.Spec.Target.Name,
-		}, deployment)
-		return deployment, err
+func (r *BackupConfigurationReconciler) deleteSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration) error {
+	deployment, err := r.getDeployment(backupConf.Namespace, backupConf.Spec.Target.Name)
+	if err != nil {
+		return err
+	}
+	restorecontainers := []corev1.Container{}
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == "backup" {
+			continue
+		}
+		restorecontainers = append(restorecontainers, container)
+	}
+	deployment.Spec.Template.Spec.Containers = restorecontainers
+	if err := r.Update(context.Background(), deployment); err != nil {
+		return err
+	}
+	selector, err := metav1.LabelSelectorAsMap(deployment.Spec.Selector)
+	if err != nil {
+		return nil
+	}
+	pods := &corev1.PodList{}
+	err = r.List(context.Background(), pods, client.MatchingLabels(selector))
+	if err != nil {
+		return nil
+	}
+	replicasToDelete := []appsv1.ReplicaSet{}
+	for _, pod := range pods.Items {
+		for _, podRef := range pod.OwnerReferences {
+			rs := &appsv1.ReplicaSet{}
+			if err := r.Get(context.Background(), client.ObjectKey{
+				Name:      podRef.Name,
+				Namespace: pod.Namespace,
+			}, rs); err != nil {
+				return nil
+			}
+			for _, rsRef := range rs.OwnerReferences {
+				if rsRef.Kind == deployment.Kind && rsRef.Name == deployment.Name {
+					replicasToDelete = append(replicasToDelete, *rs)
+				}
+			}
+		}
 	}
 
-	deployment, err := getDeployment()
+	for _, replica := range replicasToDelete {
+		if err := r.Delete(context.TODO(), &replica); err != nil {
+			return nil
+		}
+	}
+	return nil
+}
+
+func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration) error {
+	log := r.Log.WithValues("backupconf", backupConf.Name)
+	deployment, err := r.getDeployment(backupConf.Namespace, backupConf.Spec.Target.Name)
 	if err != nil {
 		log.Error(err, "unable to get Deployment")
 		return err
 	}
-	log.WithValues("Deployment", backupConf.Spec.Target.Name)
+	log.V(1).Info("got deployment", "Deployment", deployment)
 	for _, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "backup" {
 			log.V(0).Info("There is already a backup sidecar container. Skipping", "container", container)
@@ -155,7 +210,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 		log.Error(err, "unable to get deployment pods")
 		return nil
 	}
-	podsToDelete := []appsv1.ReplicaSet{}
+	replicasToDelete := []appsv1.ReplicaSet{}
 	log.V(1).Info("got that list of pods", "pods", len(pods.Items))
 	for _, pod := range pods.Items {
 		log.V(1).Info("checking pod", "pod", pod)
@@ -172,77 +227,34 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 			for _, rsRef := range rs.OwnerReferences {
 				if rsRef.Kind == deployment.Kind && rsRef.Name == deployment.Name {
 					log.V(0).Info("Adding pod to the list of pods to be restarted", "pod", pod.Name)
-					podsToDelete = append(podsToDelete, *rs)
+					replicasToDelete = append(replicasToDelete, *rs)
 				}
 			}
 		}
 	}
 	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
+
+	if err := formolrbac.CreateBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
+		log.Error(err, "unable to create backupsessionlistener RBAC")
+		return nil
+	}
+
 	log.V(0).Info("Adding a sicar container")
 	if err := r.Update(context.Background(), deployment); err != nil {
 		log.Error(err, "unable to update the Deployment")
 		return err
 	}
-	for _, pod := range podsToDelete {
-		if err := r.Delete(context.TODO(), &pod); err != nil {
-			log.Error(err, "unable to delete pod", "pod", pod.Name)
+	for _, replica := range replicasToDelete {
+		if err := r.Delete(context.TODO(), &replica); err != nil {
+			log.Error(err, "unable to delete replica", "replica", replica.Name)
 			return nil
 		}
-	}
-	deployment, err = getDeployment()
-	if err != nil {
-		log.Error(err, "unable to get Deployment")
-		return err
 	}
 	return nil
 }
 
 func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.BackupConfiguration) error {
 	log := r.Log.WithName("addCronJob")
-
-	//	serviceaccount := &corev1.ServiceAccount{
-	//		ObjectMeta: metav1.ObjectMeta{
-	//			Namespace: backupConf.Namespace,
-	//			Name:      "backupsession-creator",
-	//		},
-	//	}
-	//	if err := r.Get(context.Background(), client.ObjectKey{
-	//		Namespace: backupConf.Namespace,
-	//		Name:      "backupsession-creator",
-	//	}, serviceaccount); err != nil && errors.IsNotFound(err) {
-	//		log.V(0).Info("creating service account", "service account", serviceaccount)
-	//		if err = r.Create(context.Background(), serviceaccount); err != nil {
-	//			log.Error(err, "unable to create serviceaccount", "serviceaccount", serviceaccount)
-	//			return nil
-	//		}
-	//	}
-	//	rolebinding := &rbacv1.RoleBinding{
-	//		ObjectMeta: metav1.ObjectMeta{
-	//			Namespace: backupConf.Namespace,
-	//			Name:      "backupsession-creator-rolebinding",
-	//		},
-	//		Subjects: []rbacv1.Subject{
-	//			rbacv1.Subject{
-	//				Kind: "ServiceAccount",
-	//				Name: "backupsession-creator",
-	//			},
-	//		},
-	//		RoleRef: rbacv1.RoleRef{
-	//			APIGroup: "rbac.authorization.k8s.io",
-	//			Kind:     "ClusterRole",
-	//			Name:     "backupsession-creator",
-	//		},
-	//	}
-	//	if err := r.Get(context.Background(), client.ObjectKey{
-	//		Namespace: backupConf.Namespace,
-	//		Name:      "backupsession-creator-rolebinding",
-	//	}, rolebinding); err != nil && errors.IsNotFound(err) {
-	//		log.V(0).Info("creating role binding for service account", "rolebinding", rolebinding, "service account", serviceaccount)
-	//		if err = r.Create(context.Background(), rolebinding); err != nil {
-	//			log.Error(err, "unable to create rolebinding", "rolebinding", rolebinding)
-	//			return nil
-	//		}
-	//	}
 
 	cronjob := &kbatch_beta1.CronJob{}
 	if err := r.Get(context.Background(), client.ObjectKey{
@@ -254,6 +266,11 @@ func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.Ba
 	} else if errors.IsNotFound(err) == false {
 		log.Error(err, "something went wrong")
 		return err
+	}
+
+	if err := formolrbac.CreateBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
+		log.Error(err, "unable to create backupsession-creator RBAC")
+		return nil
 	}
 
 	cronjob = &kbatch_beta1.CronJob{
@@ -310,8 +327,33 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	// your logic here
 	backupConf := &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, req.NamespacedName, backupConf); err != nil {
-		log.Error(err, "unable to fetch BackupConfiguration")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	finalizerName := "finalizer.backupconfiguration.formol.desmojim.fr"
+
+	if backupConf.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
+			backupConf.ObjectMeta.Finalizers = append(backupConf.ObjectMeta.Finalizers, finalizerName)
+			if err := r.Update(context.Background(), backupConf); err != nil {
+				log.Error(err, "unable to append finalizer")
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		log.V(0).Info("backupconf being deleted", "backupconf", backupConf.Name)
+		if formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
+			if err := r.deleteExternelResources(backupConf); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		backupConf.ObjectMeta.Finalizers = formolutils.RemoveString(backupConf.ObjectMeta.Finalizers, finalizerName)
+		if err := r.Update(context.Background(), backupConf); err != nil {
+			log.Error(err, "unable to remove finalizer")
+			return ctrl.Result{}, err
+		}
+		// We have been deleted. Return here
+		return ctrl.Result{}, nil
 	}
 
 	if err := r.addCronJob(backupConf); err != nil {
@@ -330,12 +372,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		return ctrl.Result{}, nil
 	}
 
-	if backupConf.Spec.Suspend != nil && *backupConf.Spec.Suspend == true {
-		log.V(0).Info("We are suspended return and wait for the next event")
-		// TODO Suspend the CronJob
-		return ctrl.Result{}, nil
-	}
-
+	backupConf.Status.Suspended = false
 	log.V(1).Info("updating backupconf")
 	if err := r.Status().Update(ctx, backupConf); err != nil {
 		log.Error(err, "unable to update backupconf", "backupconf", backupConf)
@@ -345,9 +382,28 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	return ctrl.Result{}, nil
 }
 
+func (r *BackupConfigurationReconciler) deleteExternelResources(backupConf *formolv1alpha1.BackupConfiguration) error {
+	deployment, err := r.getDeployment(backupConf.Namespace, backupConf.Spec.Target.Name)
+	if err != nil {
+		return err
+	}
+	if err := formolrbac.DeleteBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
+		return err
+	}
+	if err := formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
+		return err
+	}
+	if err := r.deleteSidecarContainer(backupConf); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *BackupConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&formolv1alpha1.BackupConfiguration{}).
-		Owns(&kbatch_beta1.CronJob{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 3}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		//		Owns(&kbatch_beta1.CronJob{}).
 		Complete(r)
 }

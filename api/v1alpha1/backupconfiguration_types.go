@@ -48,8 +48,6 @@ type BackupConfigurationSpec struct {
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
 	Paths        []string             `json:"paths"`
-	// +optional
-	Suspend *bool `json:"suspend,omitempty"`
 }
 
 // BackupConfigurationStatus defines the observed state of BackupConfiguration
@@ -62,10 +60,9 @@ type BackupConfigurationStatus struct {
 	ActiveSidecar  bool         `json:"activeSidecar"`
 }
 
+// BackupConfiguration is the Schema for the backupconfigurations API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
-// BackupConfiguration is the Schema for the backupconfigurations API
 type BackupConfiguration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
