@@ -348,7 +348,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	} else {
 		log.V(0).Info("backupconf being deleted", "backupconf", backupConf.Name)
 		if formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
-			if err := r.deleteExternelResources(backupConf); err != nil {
+			if err := r.deleteExternalResources(backupConf); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -387,7 +387,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	return ctrl.Result{}, nil
 }
 
-func (r *BackupConfigurationReconciler) deleteExternelResources(backupConf *formolv1alpha1.BackupConfiguration) error {
+func (r *BackupConfigurationReconciler) deleteExternalResources(backupConf *formolv1alpha1.BackupConfiguration) error {
 	deployment, err := r.getDeployment(backupConf.Namespace, backupConf.Spec.Target.Name)
 	if err != nil {
 		return err
