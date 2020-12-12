@@ -35,6 +35,14 @@ type Target struct {
 	Kind       string `json:"kind"`
 }
 
+type Keep struct {
+	Last int32 `json:"last,omitempty"`
+	Daily int32 `json:"daily,omitempty"`
+	Weekly int32 `json:"weekly,omitempty"`
+	Monthly int32 `json:"monthly,omitempty"`
+	Yearly int32 `json:"yearly,omitempty"`
+}
+
 // BackupConfigurationSpec defines the desired state of BackupConfiguration
 type BackupConfigurationSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -48,6 +56,8 @@ type BackupConfigurationSpec struct {
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
 	Paths        []string             `json:"paths"`
+	// +optional
+	Keep `json:"keep,omitempty"`
 }
 
 // BackupConfigurationStatus defines the observed state of BackupConfiguration
@@ -58,6 +68,7 @@ type BackupConfigurationStatus struct {
 	Suspended      bool         `json:"suspended"`
 	ActiveCronJob  bool         `json:"activeCronJob"`
 	ActiveSidecar  bool         `json:"activeSidecar"`
+	NumberOfBackup int32 `json:"numberOfBackup"`
 }
 
 // BackupConfiguration is the Schema for the backupconfigurations API
