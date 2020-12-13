@@ -188,6 +188,11 @@ func CreateBackupSessionListenerRBAC(cl client.Client, saName string, namespace 
 				Resources: []string{"backupsessions", "backupconfigurations"},
 			},
 			rbacv1.PolicyRule{
+				Verbs:     []string{"update", "delete"},
+				APIGroups: []string{"formol.desmojim.fr"},
+				Resources: []string{"backupsessions"},
+			},
+			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch", "patch", "update"},
 				APIGroups: []string{"formol.desmojim.fr"},
 				Resources: []string{"backupsessions/status"},
