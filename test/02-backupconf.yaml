@@ -17,4 +17,9 @@ spec:
       mountPath: /data
   paths:
     - /data
-
+  keep:
+    last: 5
+    daily: 5
+    weekly: 3
+    monthly: 10
+    yearly: 3
