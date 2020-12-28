@@ -29,10 +29,23 @@ type Repository struct {
 	Name string `json:"name"`
 }
 
+type Step struct {
+	Name string          `json:"name"`
+	Env  []corev1.EnvVar `json:"env"`
+}
+
 type Target struct {
-	ApiVersion string `json:"apiVersion"`
-	Name       string `json:"name"`
-	Kind       string `json:"kind"`
+	Kind string `json:"kind"`
+	// +optional
+	ApiVersion string `json:"apiVersion,omitempty"`
+	// +optional
+	Name string `json:"name,omitempty"`
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	// +optional
+	Paths []string `json:"paths,omitempty"`
+	// +optional
+	Steps []Step `json:"steps,omitempty"`
 }
 
 type Keep struct {
@@ -50,12 +63,8 @@ type BackupConfigurationSpec struct {
 
 	// Foo is an example field of BackupConfiguration. Edit BackupConfiguration_types.go to remove/update
 	Repository `json:"repository"`
-	Task       string `json:"task,omitempty"`
-	Schedule   string `json:"schedule"`
-	Target     `json:"target"`
-	// +optional
-	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
-	Paths        []string             `json:"paths"`
+	Schedule   string   `json:"schedule"`
+	Targets    []Target `json:"targets"`
 	// +optional
 	Keep `json:"keep,omitempty"`
 }

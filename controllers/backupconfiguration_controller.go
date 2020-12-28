@@ -67,8 +67,8 @@ func (r *BackupConfigurationReconciler) getDeployment(namespace string, name str
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=cronjobs/status,verbs=get
 
-func (r *BackupConfigurationReconciler) deleteSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration) error {
-	deployment, err := r.getDeployment(backupConf.Namespace, backupConf.Spec.Target.Name)
+func (r *BackupConfigurationReconciler) deleteSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration, target formolv1alpha1.Target) error {
+	deployment, err := r.getDeployment(backupConf.Namespace, target.Name)
 	if err != nil {
 		return err
 	}
@@ -118,9 +118,9 @@ func (r *BackupConfigurationReconciler) deleteSidecarContainer(backupConf *formo
 	return nil
 }
 
-func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration) error {
+func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1alpha1.BackupConfiguration, target formolv1alpha1.Target) error {
 	log := r.Log.WithValues("backupconf", backupConf.Name)
-	deployment, err := r.getDeployment(backupConf.Namespace, backupConf.Spec.Target.Name)
+	deployment, err := r.getDeployment(backupConf.Namespace, target.Name)
 	if err != nil {
 		log.Error(err, "unable to get Deployment")
 		return err
@@ -174,7 +174,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	}
 	// S3 backing storage
 	if (formolv1alpha1.S3{}) != repo.Spec.Backend.S3 {
-		url := "s3:http://" + repo.Spec.Backend.S3.Server + "/" + repo.Spec.Backend.S3.Bucket + "/" + backupConf.Spec.Target.Name
+		url := "s3:http://" + repo.Spec.Backend.S3.Server + "/" + repo.Spec.Backend.S3.Bucket + "/" + target.Name
 		sidecar.Env = append(sidecar.Env, corev1.EnvVar{
 			Name:  "RESTIC_REPOSITORY",
 			Value: url,
@@ -198,7 +198,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 		}
 	}
 
-	for _, volumemount := range backupConf.Spec.VolumeMounts {
+	for _, volumemount := range target.VolumeMounts {
 		log.V(1).Info("mounts", "volumemount", volumemount)
 		volumemount.ReadOnly = true
 		sidecar.VolumeMounts = append(sidecar.VolumeMounts, *volumemount.DeepCopy())
@@ -366,15 +366,17 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	}
 	backupConf.Status.ActiveCronJob = true
 
-	switch backupConf.Spec.Target.Kind {
-	case "Deployment":
-		if err := r.addSidecarContainer(backupConf); err != nil {
+	for _, target := range backupConf.Spec.Targets {
+		switch target.Kind {
+		case "Deployment":
+			if err := r.addSidecarContainer(backupConf, target); err != nil {
+				return ctrl.Result{}, nil
+			}
+			backupConf.Status.ActiveSidecar = true
+		case "PersistentVolumeClaim":
+			log.V(0).Info("TODO backup PVC")
 			return ctrl.Result{}, nil
 		}
-		backupConf.Status.ActiveSidecar = true
-	case "PersistentVolumeClaim":
-		log.V(0).Info("TODO backup PVC")
-		return ctrl.Result{}, nil
 	}
 
 	backupConf.Status.Suspended = false
@@ -388,18 +390,23 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 }
 
 func (r *BackupConfigurationReconciler) deleteExternalResources(backupConf *formolv1alpha1.BackupConfiguration) error {
-	deployment, err := r.getDeployment(backupConf.Namespace, backupConf.Spec.Target.Name)
-	if err != nil {
-		return err
-	}
-	if err := formolrbac.DeleteBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
-		return err
-	}
-	if err := formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
-		return err
-	}
-	if err := r.deleteSidecarContainer(backupConf); err != nil {
-		return err
+	for _, target := range backupConf.Spec.Targets {
+		switch target.Kind {
+		case "Deployment":
+			deployment, err := r.getDeployment(backupConf.Namespace, target.Name)
+			if err != nil {
+				return err
+			}
+			if err := formolrbac.DeleteBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
+				return err
+			}
+			if err := formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
+				return err
+			}
+			if err := r.deleteSidecarContainer(backupConf, target); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

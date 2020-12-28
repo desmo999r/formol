@@ -61,12 +61,13 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	log.V(1).Info("Found BackupConfiguration", "BackupConfiguration", backupConf)
 
 	// Found the BackupConfiguration.
-	switch backupConf.Spec.Target.Kind {
-	case "PersistentVolumeClaim":
-		return r.CreateJob()
-	default:
-		return ctrl.Result{}, nil
+	for _, target := range backupConf.Spec.Targets {
+		switch target.Kind {
+		case "PersistentVolumeClaim":
+			return r.CreateJob()
+		}
 	}
+	return ctrl.Result{}, nil
 }
 
 func (r *BackupSessionReconciler) CreateJob() (ctrl.Result, error) {
