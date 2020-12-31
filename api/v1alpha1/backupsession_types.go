@@ -46,6 +46,8 @@ type BackupSessionSpec struct {
 }
 
 type TargetStatus struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 	// +optional
 	BackupState `json:"state,omitempty"`
 	// +optional
