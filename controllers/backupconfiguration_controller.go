@@ -132,7 +132,6 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 			return nil
 		}
 	}
-	repo := &formolv1alpha1.Repo{}
 	sidecar := corev1.Container{
 		Name:  "backup",
 		Image: "desmo999r/formolcli:latest",
@@ -165,6 +164,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	}
 
 	// Gather information from the repo
+	repo := &formolv1alpha1.Repo{}
 	if err := r.Get(context.Background(), client.ObjectKey{
 		Namespace: backupConf.Namespace,
 		Name:      backupConf.Spec.Repository.Name,
@@ -172,31 +172,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 		log.Error(err, "unable to get Repo from BackupConfiguration")
 		return err
 	}
-	// S3 backing storage
-	if (formolv1alpha1.S3{}) != repo.Spec.Backend.S3 {
-		url := "s3:http://" + repo.Spec.Backend.S3.Server + "/" + repo.Spec.Backend.S3.Bucket + "/" + target.Name
-		sidecar.Env = append(sidecar.Env, corev1.EnvVar{
-			Name:  "RESTIC_REPOSITORY",
-			Value: url,
-		})
-		for _, key := range []string{
-			"AWS_ACCESS_KEY_ID",
-			"AWS_SECRET_ACCESS_KEY",
-			"RESTIC_PASSWORD",
-		} {
-			sidecar.Env = append(sidecar.Env, corev1.EnvVar{
-				Name: key,
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: repo.Spec.RepositorySecrets,
-						},
-						Key: key,
-					},
-				},
-			})
-		}
-	}
+	sidecar.Env = append(sidecar.Env, formolutils.ConfigureResticEnvVar(backupConf, repo)...)
 
 	for _, volumemount := range target.VolumeMounts {
 		log.V(1).Info("mounts", "volumemount", volumemount)
