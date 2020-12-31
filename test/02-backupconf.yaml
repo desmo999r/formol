@@ -2,24 +2,38 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: BackupConfiguration
 metadata:
-  name: backupconf-demo
+  name: backup-demo
   namespace: demo
 spec:
   repository:
     name: repo-minio
   schedule: "*/1 * * * *"
-  target:
+  targets:
+  - kind: Deployment
     apiVersion: v1
-    kind: Deployment
     name: nginx-deployment
-  volumeMounts:
-    - name: demo-data
-      mountPath: /data
-  paths:
-    - /data
+    volumeMounts:
+      - name: demo-data
+        mountPath: /data
+    paths:
+      - /data
+  - kind: task
+    name: backup-pg
+    steps:
+      - name: backup-pg
+        namespace: demo
+        env:
+          - name: PGHOST
+            value: postgres
+          - name: PGDATABASE
+            value: demopostgres
+          - name: PGUSER
+            value: demopostgres
+          - name: PGPASSWD
+            value: password123!
   keep:
     last: 5
-    daily: 5
-    weekly: 3
-    monthly: 10
+    daily: 2
+    weekly: 2
+    monthly: 6
     yearly: 3
