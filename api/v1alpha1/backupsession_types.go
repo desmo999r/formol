@@ -26,6 +26,7 @@ import (
 type BackupState string
 
 const (
+	New     BackupState = "New"
 	Running BackupState = "Running"
 	Success BackupState = "Success"
 	Failure BackupState = "Failure"
