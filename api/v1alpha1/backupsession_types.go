@@ -23,12 +23,12 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type BackupSessionState string
+type BackupState string
 
 const (
-	Running BackupSessionState = "Running"
-	Success BackupSessionState = "Success"
-	Failure BackupSessionState = "Failure"
+	Running BackupState = "Running"
+	Success BackupState = "Success"
+	Failure BackupState = "Failure"
 )
 
 type Ref struct {
@@ -44,18 +44,27 @@ type BackupSessionSpec struct {
 	Ref `json:"ref"`
 }
 
-// BackupSessionStatus defines the observed state of BackupSession
-type BackupSessionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+type TargetStatus struct {
 	// +optional
-	BackupSessionState `json:"state,omitempty"`
+	BackupState `json:"state,omitempty"`
 	// +optional
 	SnapshotId string `json:"snapshotId,omitempty"`
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
+}
+
+// BackupSessionStatus defines the observed state of BackupSession
+type BackupSessionStatus struct {
+	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+	// +optional
+	BackupState `json:"state,omitempty"`
+	// +optional
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+	// +optional
+	Targets []TargetStatus `json:"target,omitempty"`
 }
 
 // +kubebuilder:object:root=true

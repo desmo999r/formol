@@ -30,16 +30,16 @@ type Repository struct {
 }
 
 type Step struct {
-	Name string          `json:"name"`
-	Env  []corev1.EnvVar `json:"env"`
+	Name      string          `json:"name"`
+	Namespace string          `json:"namespace"`
+	Env       []corev1.EnvVar `json:"env"`
 }
 
 type Target struct {
 	Kind string `json:"kind"`
+	Name string `json:"name"`
 	// +optional
 	ApiVersion string `json:"apiVersion,omitempty"`
-	// +optional
-	Name string `json:"name,omitempty"`
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
 	// +optional
