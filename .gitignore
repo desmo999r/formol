@@ -22,3 +22,5 @@ config/*
 !config/crd
 config/crd/bases
 !config/samples
+test/restic
+test/password
