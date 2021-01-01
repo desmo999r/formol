@@ -23,29 +23,14 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type BackupState int
+type BackupState string
 
 const (
-	Success BackupState = 3
-	New     BackupState = 2
-	Running BackupState = 1
-	Failure BackupState = 0
+	New     BackupState = "New"
+	Running BackupState = "Running"
+	Success BackupState = "Success"
+	Failure BackupState = "Failure"
 )
-
-func (b *BackupState) String() string {
-	var state string
-	switch *b {
-	case Failure:
-		state = "Failure"
-	case Running:
-		state = "Running"
-	case New:
-		state = "New"
-	case Success:
-		state = "Success"
-	}
-	return state
-}
 
 type Ref struct {
 	Name string `json:"name"`
