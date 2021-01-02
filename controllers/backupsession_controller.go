@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -30,14 +31,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 	formolutils "github.com/desmo999r/formol/pkg/utils"
 )
 
 var (
-	sessionState = ".metadata.state"
+	sessionState  = ".metadata.state"
+	finalizerName = "finalizer.backupsession.formol.desmojim.fr"
 )
 
 // BackupSessionReconciler reconciles a BackupSession object
@@ -49,10 +51,52 @@ type BackupSessionReconciler struct {
 	BackupConf    *formolv1alpha1.BackupConfiguration
 }
 
+func (r *BackupSessionReconciler) StatusUpdate() error {
+	log := r.Log.WithValues("backupsession-statusupdate", r.BackupSession)
+	ctx := context.Background()
+	switch r.BackupSession.Status.BackupState {
+	case formolv1alpha1.New:
+	Loop:
+		for _, target := range r.BackupSession.Status.Targets {
+			r.BackupSession.Status.BackupState = formolv1alpha1.Success
+			switch target.BackupState {
+			case formolv1alpha1.New:
+				log.V(1).Info("target not finished. wait for it", "target", target)
+				return nil
+			case formolv1alpha1.Success:
+				log.V(1).Info("target successful", "target", target)
+			case formolv1alpha1.Failure:
+				log.V(1).Info("target failed", "target", target)
+				r.BackupSession.Status.BackupState = formolv1alpha1.Failure
+				break Loop
+			}
+		}
+		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
+			log.Error(err, "unable to update BackupSession status")
+			return err
+		}
+	case formolv1alpha1.Deleted:
+		for _, target := range r.BackupSession.Status.Targets {
+			if target.BackupState != formolv1alpha1.Deleted {
+				log.V(1).Info("snaphot has not been deleted. won't delete the backupsession", "target", target)
+				return nil
+			}
+		}
+		log.V(1).Info("all the snapshots have been deleted. deleting the backupsession")
+		controllerutil.RemoveFinalizer(r.BackupSession, finalizerName)
+		if err := r.Update(ctx, r.BackupSession); err != nil {
+			log.Error(err, "unable to remove finalizer")
+			return err
+		}
+	}
+	return nil
+}
+
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions/status,verbs=get;update;patch
 
 func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	time.Sleep(100 * time.Millisecond)
 	log := r.Log.WithValues("backupsession", req.NamespacedName)
 	ctx := context.Background()
 
@@ -62,6 +106,15 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		log.Error(err, "unable to get backupsession")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	log.V(0).Info("backupSession", "backupSession.ObjectMeta", r.BackupSession.ObjectMeta, "backupSession.Status", r.BackupSession.Status)
+	if r.BackupSession.Status.ObservedGeneration == r.BackupSession.ObjectMeta.Generation {
+		// status update
+		log.V(0).Info("status update")
+		return ctrl.Result{}, r.StatusUpdate()
+	}
+	r.BackupSession.Status.ObservedGeneration = r.BackupSession.ObjectMeta.Generation
+	r.BackupSession.Status.BackupState = formolv1alpha1.New
+	r.BackupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
 	r.BackupConf = &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: r.BackupSession.Namespace,
@@ -70,26 +123,22 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log.V(1).Info("Found BackupConfiguration", "BackupConfiguration", r.BackupConf)
-
-	finalizerName := "finalizer.backupsession.formol.desmojim.fr"
-
 	if r.BackupSession.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !formolutils.ContainsString(r.BackupSession.ObjectMeta.Finalizers, finalizerName) {
-			r.BackupSession.ObjectMeta.Finalizers = append(r.BackupSession.ObjectMeta.Finalizers, finalizerName)
+		if !controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
+			controllerutil.AddFinalizer(r.BackupSession, finalizerName)
 			if err := r.Update(ctx, r.BackupSession); err != nil {
-				log.Error(err, "unable to append finalizer")
+				log.Error(err, "unable to add finalizer")
 				return ctrl.Result{}, err
 			}
 		}
 	} else {
 		log.V(0).Info("backupsession being deleted", "backupsession", r.BackupSession.Name)
-		if formolutils.ContainsString(r.BackupSession.ObjectMeta.Finalizers, finalizerName) {
+		if controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
 			if err := r.deleteExternalResources(); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
-		r.BackupSession.ObjectMeta.Finalizers = formolutils.RemoveString(r.BackupSession.ObjectMeta.Finalizers, finalizerName)
+		controllerutil.RemoveFinalizer(r.BackupSession, finalizerName)
 		if err := r.Update(ctx, r.BackupSession); err != nil {
 			log.Error(err, "unable to remove finalizer")
 			return ctrl.Result{}, err
@@ -100,16 +149,34 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	// Found the BackupConfiguration.
 	for _, target := range r.BackupConf.Spec.Targets {
+		if !func(name string) bool {
+			for _, target := range r.BackupSession.Status.Targets {
+				if target.Name == name {
+					return true
+				}
+			}
+			return false
+		}(target.Name) {
+			r.BackupSession.Status.Targets = append(r.BackupSession.Status.Targets, formolv1alpha1.TargetStatus{
+				Name:        target.Name,
+				Kind:        target.Kind,
+				BackupState: formolv1alpha1.New,
+			})
+		}
 		switch target.Kind {
-		case "task":
+		case "Task":
 			if err := r.CreateJob(target); err != nil {
 				log.V(0).Info("unable to create task", "task", target)
 				return ctrl.Result{}, err
 			}
 		}
 	}
+	if err := r.Status().Update(ctx, r.BackupSession); err != nil {
+		log.Error(err, "unable to update backupSession")
+		return ctrl.Result{}, err
+	}
 	// cleanup old backups
-	log.V(0).Info("try to cleanup old backups")
+	log.V(1).Info("try to cleanup old backups")
 	backupSessionList := &formolv1alpha1.BackupSessionList{}
 	if err := r.List(ctx, backupSessionList, client.InNamespace(r.BackupConf.Namespace), client.MatchingFieldsSelector{Selector: fields.SelectorFromSet(fields.Set{sessionState: "Success"})}); err != nil {
 		log.Error(err, "unable to get backupsessionlist")
@@ -117,7 +184,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 	if len(backupSessionList.Items) < 2 {
 		// Not enough backupSession to proceed
-		log.V(0).Info("Not enough successful backup jobs")
+		log.V(1).Info("Not enough successful backup jobs")
 		return ctrl.Result{}, nil
 	}
 
@@ -141,9 +208,11 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			continue
 		}
 		deleteSession := true
+		keep := []string{}
 		if lastBackups.Counter > 0 {
 			log.V(1).Info("Keep backup", "last", session.Status.StartTime)
 			lastBackups.Counter--
+			keep = append(keep, "last")
 			deleteSession = false
 		}
 		if dailyBackups.Counter > 0 {
@@ -151,6 +220,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				log.V(1).Info("Keep backup", "daily", session.Status.StartTime)
 				dailyBackups.Counter--
 				dailyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "daily")
 				deleteSession = false
 			}
 		}
@@ -159,6 +229,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				log.V(1).Info("Keep backup", "weekly", session.Status.StartTime)
 				weeklyBackups.Counter--
 				weeklyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "weekly")
 				deleteSession = false
 			}
 		}
@@ -167,6 +238,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				log.V(1).Info("Keep backup", "monthly", session.Status.StartTime)
 				monthlyBackups.Counter--
 				monthlyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "monthly")
 				deleteSession = false
 			}
 		}
@@ -175,6 +247,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				log.V(1).Info("Keep backup", "yearly", session.Status.StartTime)
 				yearlyBackups.Counter--
 				yearlyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "yearly")
 				deleteSession = false
 			}
 		}
@@ -184,6 +257,11 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				log.Error(err, "unable to delete backupsession", "session", session.Name)
 				// we don't return anything, we keep going
 			}
+		} else {
+			session.Status.Keep = strings.Join(keep, ",") + " " + time.Now().Format("2006 Jan 02 15:04:05 -0700 MST")
+			if err := r.Status().Update(ctx, &session); err != nil {
+				log.Error(err, "unable to update session status", "session", session)
+			}
 		}
 	}
 	return ctrl.Result{}, nil
@@ -192,6 +270,20 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error {
 	log := r.Log.WithValues("createjob", target.Name)
 	ctx := context.Background()
+	backupSessionEnv := []corev1.EnvVar{
+		corev1.EnvVar{
+			Name:  "TARGET_NAME",
+			Value: target.Name,
+		},
+		corev1.EnvVar{
+			Name:  "BACKUPSESSION_NAME",
+			Value: r.BackupSession.Name,
+		},
+		corev1.EnvVar{
+			Name:  "BACKUPSESSION_NAMESPACE",
+			Value: r.BackupSession.Namespace,
+		},
+	}
 
 	output := corev1.VolumeMount{
 		Name:      "output",
@@ -202,7 +294,7 @@ func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error 
 		Image:        "desmo999r/formolcli:latest",
 		Args:         []string{"backup", "volume", "--tag", r.BackupSession.Name, "--path", "/output"},
 		VolumeMounts: []corev1.VolumeMount{output},
-		Env:          []corev1.EnvVar{},
+		Env:          backupSessionEnv,
 	}
 	log.V(1).Info("creating a tagget backup job", "container", restic)
 	// Gather information from the repo
@@ -215,6 +307,7 @@ func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error 
 		return err
 	}
 	// S3 backing storage
+	var ttl int32 = 300
 	restic.Env = append(restic.Env, formolutils.ConfigureResticEnvVar(r.BackupConf, repo)...)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -222,6 +315,7 @@ func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error 
 			Namespace:    r.BackupConf.Namespace,
 		},
 		Spec: batchv1.JobSpec{
+			TTLSecondsAfterFinished: &ttl,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{},
@@ -242,7 +336,7 @@ func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error 
 			log.Error(err, "unable to get function", "Function", step)
 			return err
 		}
-		function.Spec.Env = step.Env
+		function.Spec.Env = append(step.Env, backupSessionEnv...)
 		function.Spec.VolumeMounts = append(function.Spec.VolumeMounts, output)
 		job.Spec.Template.Spec.InitContainers = append(job.Spec.Template.Spec.InitContainers, function.Spec)
 	}
@@ -261,13 +355,6 @@ func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error 
 func (r *BackupSessionReconciler) deleteExternalResources() error {
 	ctx := context.Background()
 	log := r.Log.WithValues("deleteExternalResources", r.BackupSession.Name)
-	// container that will delete the restic snapshot(s) matching the backupsession
-	restic := corev1.Container{
-		Name:  "restic",
-		Image: "desmo999r/formolcli:latest",
-		Args:  []string{"delete", "snapshot", "--tag", r.BackupSession.Name},
-		Env:   []corev1.EnvVar{},
-	}
 	// Gather information from the repo
 	repo := &formolv1alpha1.Repo{}
 	if err := r.Get(ctx, client.ObjectKey{
@@ -277,29 +364,44 @@ func (r *BackupSessionReconciler) deleteExternalResources() error {
 		log.Error(err, "unable to get Repo from BackupConfiguration")
 		return err
 	}
-	restic.Env = append(restic.Env, formolutils.ConfigureResticEnvVar(r.BackupConf, repo)...)
+	env := formolutils.ConfigureResticEnvVar(r.BackupConf, repo)
+	// container that will delete the restic snapshot(s) matching the backupsession
+	deleteSnapshots := []corev1.Container{}
+	for _, target := range r.BackupSession.Status.Targets {
+		if target.BackupState == formolv1alpha1.Success {
+			deleteSnapshots = append(deleteSnapshots, corev1.Container{
+				Name:  target.Name,
+				Image: "desmo999r/formolcli:latest",
+				Args:  []string{"delete", "snapshot", "--snapshot", target.SnapshotId},
+				Env:   env,
+			})
+		}
+	}
 	// create a job to delete the restic snapshot(s) with the backupsession name tag
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("delete-%s-", r.BackupSession.Name),
-			Namespace:    r.BackupSession.Namespace,
-		},
-		Spec: batchv1.JobSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{},
-					Containers:     []corev1.Container{restic},
-					RestartPolicy:  corev1.RestartPolicyOnFailure,
+	if len(deleteSnapshots) > 0 {
+		var ttl int32 = 300
+		job := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: fmt.Sprintf("delete-%s-", r.BackupSession.Name),
+				Namespace:    r.BackupSession.Namespace,
+			},
+			Spec: batchv1.JobSpec{
+				TTLSecondsAfterFinished: &ttl,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						InitContainers: []corev1.Container{},
+						Containers:     deleteSnapshots,
+						RestartPolicy:  corev1.RestartPolicyOnFailure,
+					},
 				},
 			},
-		},
+		}
+		log.V(0).Info("creating a job to delete restic snapshots")
+		if err := r.Create(ctx, job); err != nil {
+			log.Error(err, "unable to delete job", "job", job)
+			return err
+		}
 	}
-	log.V(0).Info("creating a job to delete restic snapshots")
-	if err := r.Create(ctx, job); err != nil {
-		log.Error(err, "unable to create job", "job", job)
-		return err
-	}
-
 	return nil
 }
 
@@ -313,7 +415,7 @@ func (r *BackupSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&formolv1alpha1.BackupSession{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}). // Don't reconcile when status gets updated
+		//WithEventFilter(predicate.GenerationChangedPredicate{}). // Don't reconcile when status gets updated
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }

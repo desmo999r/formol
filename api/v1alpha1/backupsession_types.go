@@ -30,6 +30,7 @@ const (
 	Running BackupState = "Running"
 	Success BackupState = "Success"
 	Failure BackupState = "Failure"
+	Deleted BackupState = "Deleted"
 )
 
 type Ref struct {
@@ -70,6 +71,8 @@ type BackupSessionStatus struct {
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
 	Targets []TargetStatus `json:"target,omitempty"`
+	// +optional
+	Keep string `json:"keep,omitempty"`
 }
 
 // +kubebuilder:object:root=true

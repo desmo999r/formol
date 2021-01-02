@@ -17,7 +17,7 @@ spec:
         mountPath: /data
     paths:
       - /data
-  - kind: task
+  - kind: Task
     name: backup-pg
     steps:
       - name: backup-pg

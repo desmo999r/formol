@@ -392,6 +392,7 @@ func (r *BackupConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error
 		For(&formolv1alpha1.BackupConfiguration{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 3}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}). // Don't reconcile when status gets updated
+		//Owns(&formolv1alpha1.BackupSession{}).
 		Owns(&kbatch_beta1.CronJob{}).
 		Complete(r)
 }

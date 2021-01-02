@@ -77,6 +77,11 @@ func CreateBackupSessionCreatorRBAC(cl client.Client, namespace string) error {
 				Resources: []string{"backupsessions"},
 			},
 			rbacv1.PolicyRule{
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+				APIGroups: []string{"formol.desmojim.fr"},
+				Resources: []string{"backupsessions/status"},
+			},
+			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch"},
 				APIGroups: []string{"formol.desmojim.fr"},
 				Resources: []string{"backupconfigurations"},
