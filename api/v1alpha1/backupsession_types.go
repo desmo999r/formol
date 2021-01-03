@@ -77,6 +77,10 @@ type BackupSessionStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ref",type=string,JSONPath=`.spec.ref.name`
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="Started",type=string,format=date-time,JSONPath=`.status.startTime`
+// +kubebuilder:printcolumn:name="Keep",type=string,JSONPath=`.status.keep`
 
 // BackupSession is the Schema for the backupsessions API
 type BackupSession struct {
