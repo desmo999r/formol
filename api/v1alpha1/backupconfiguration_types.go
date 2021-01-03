@@ -36,6 +36,7 @@ type Step struct {
 }
 
 type Target struct {
+	// +kubebuilder:validation:Enum=Deployment;Task
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 	// +optional
@@ -45,6 +46,7 @@ type Target struct {
 	// +optional
 	Paths []string `json:"paths,omitempty"`
 	// +optional
+	// +kubebuilder:validation:MinItems=1
 	Steps []Step `json:"steps,omitempty"`
 }
 
@@ -63,8 +65,11 @@ type BackupConfigurationSpec struct {
 
 	// Foo is an example field of BackupConfiguration. Edit BackupConfiguration_types.go to remove/update
 	Repository `json:"repository"`
-	Schedule   string   `json:"schedule"`
-	Targets    []Target `json:"targets"`
+
+	// +optional
+	Schedule string `json:"schedule,omitempty"`
+	// +kubebuilder:validation:MinItems=1
+	Targets []Target `json:"targets"`
 	// +optional
 	Keep `json:"keep,omitempty"`
 }
