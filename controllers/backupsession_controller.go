@@ -136,6 +136,22 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 	return nil
 }
 
+func (r *BackupSessionReconciler) IsBackupOngoing() bool {
+	log := r.Log.WithName("IsBackupOngoing")
+	ctx := context.Background()
+
+	backupSessionList := &formolv1alpha1.BackupSessionList{}
+	if err := r.List(ctx, backupSessionList, client.InNamespace(r.BackupConf.Namespace), client.MatchingFieldsSelector{Selector: fields.SelectorFromSet(fields.Set{sessionState: "Running"})}); err != nil {
+		log.Error(err, "unable to get backupsessionlist")
+		return true
+	}
+	if len(backupSessionList.Items) > 0 {
+		return true
+	} else {
+		return false
+	}
+}
+
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions/status,verbs=get;update;patch;create;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=functions,verbs=get;list;watch
@@ -180,6 +196,9 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				return ctrl.Result{}, err
 			}
 		}
+	} else if r.IsBackupOngoing() {
+		log.V(0).Info("there is an ongoing backup. let's reschedule the deletion of the backupsession")
+		return ctrl.Result{RequeueAfter: 20 * time.Second}, nil
 	} else {
 		log.V(0).Info("backupsession being deleted", "backupsession", r.BackupSession.Name)
 		if controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
@@ -196,30 +215,6 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, nil
 	}
 
-	// Found the BackupConfiguration.
-	//	for _, target := range r.BackupConf.Spec.Targets {
-	//		if !func(name string) bool {
-	//			for _, target := range r.BackupSession.Status.Targets {
-	//				if target.Name == name {
-	//					return true
-	//				}
-	//			}
-	//			return false
-	//		}(target.Name) {
-	//			r.BackupSession.Status.Targets = append(r.BackupSession.Status.Targets, formolv1alpha1.TargetStatus{
-	//				Name:        target.Name,
-	//				Kind:        target.Kind,
-	//				BackupState: formolv1alpha1.New,
-	//			})
-	//		}
-	//		switch target.Kind {
-	//		case "Task":
-	//			if err := r.CreateJob(target); err != nil {
-	//				log.V(0).Info("unable to create task", "task", target)
-	//				return ctrl.Result{}, err
-	//			}
-	//		}
-	//	}
 	if err := r.Status().Update(ctx, r.BackupSession); err != nil {
 		log.Error(err, "unable to update backupSession")
 		return ctrl.Result{}, err
