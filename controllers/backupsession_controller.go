@@ -54,21 +54,65 @@ type BackupSessionReconciler struct {
 func (r *BackupSessionReconciler) StatusUpdate() error {
 	log := r.Log.WithValues("backupsession-statusupdate", r.BackupSession)
 	ctx := context.Background()
+	// start the next task
+	startNextTask := func() (*formolv1alpha1.TargetStatus, error) {
+		nextTarget := len(r.BackupSession.Status.Targets)
+		if nextTarget < len(r.BackupConf.Spec.Targets) {
+			target := r.BackupConf.Spec.Targets[nextTarget]
+			targetStatus := formolv1alpha1.TargetStatus{
+				Name:        target.Name,
+				Kind:        target.Kind,
+				BackupState: formolv1alpha1.New,
+			}
+			r.BackupSession.Status.Targets = append(r.BackupSession.Status.Targets, targetStatus)
+			switch target.Kind {
+			case "Task":
+				if err := r.CreateJob(target); err != nil {
+					log.V(0).Info("unable to create task", "task", target)
+					targetStatus.BackupState = formolv1alpha1.Failure
+					return nil, err
+				}
+			}
+			return &targetStatus, nil
+		} else {
+			return nil, nil
+		}
+	}
+	// Test the backupsession backupstate to decide what to do
 	switch r.BackupSession.Status.BackupState {
 	case formolv1alpha1.New:
-	Loop:
-		for _, target := range r.BackupSession.Status.Targets {
-			r.BackupSession.Status.BackupState = formolv1alpha1.Success
-			switch target.BackupState {
-			case formolv1alpha1.New:
-				log.V(1).Info("target not finished. wait for it", "target", target)
-				return nil
-			case formolv1alpha1.Success:
-				log.V(1).Info("target successful", "target", target)
-			case formolv1alpha1.Failure:
-				log.V(1).Info("target failed", "target", target)
-				r.BackupSession.Status.BackupState = formolv1alpha1.Failure
-				break Loop
+		// Brand new backupsession; start the first task
+		r.BackupSession.Status.BackupState = formolv1alpha1.Running
+		targetStatus, err := startNextTask()
+		if err != nil {
+			return err
+		}
+		log.V(0).Info("New backup. Start the first task", "task", targetStatus)
+		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
+			log.Error(err, "unable to update BackupSession status")
+			return err
+		}
+	case formolv1alpha1.Running:
+		// Backup ongoing. Check the status of the last task to decide what to do
+		currentTargetStatus := r.BackupSession.Status.Targets[len(r.BackupSession.Status.Targets)-1]
+		switch currentTargetStatus.BackupState {
+		case formolv1alpha1.Failure:
+			// The last task failed. We mark the backupsession as failed and we stop here.
+			log.V(0).Info("last backup task failed. Stop here", "targetStatus", currentTargetStatus)
+			r.BackupSession.Status.BackupState = formolv1alpha1.Failure
+		case formolv1alpha1.Running:
+			// The current task is still running. Nothing to do
+			log.V(0).Info("task is still running", "targetStatus", currentTargetStatus)
+		case formolv1alpha1.Success:
+			// The last task successed. Let's try to start the next one
+			targetStatus, err := startNextTask()
+			if err != nil {
+				return err
+			}
+			log.V(0).Info("last task was a success. start a new one", "currentTargetStatus", currentTargetStatus, "targetStatus", currentTargetStatus)
+			if targetStatus == nil {
+				// No more task to start. The backup is a success
+				r.BackupSession.Status.BackupState = formolv1alpha1.Success
 			}
 		}
 		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
@@ -116,6 +160,9 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 	r.BackupSession.Status.ObservedGeneration = r.BackupSession.ObjectMeta.Generation
 	r.BackupSession.Status.BackupState = formolv1alpha1.New
+	// Prepare the next schedule to start the first task
+	reschedule := ctrl.Result{RequeueAfter: 5 * time.Second}
+
 	r.BackupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
 	r.BackupConf = &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{
@@ -150,44 +197,45 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// Found the BackupConfiguration.
-	for _, target := range r.BackupConf.Spec.Targets {
-		if !func(name string) bool {
-			for _, target := range r.BackupSession.Status.Targets {
-				if target.Name == name {
-					return true
-				}
-			}
-			return false
-		}(target.Name) {
-			r.BackupSession.Status.Targets = append(r.BackupSession.Status.Targets, formolv1alpha1.TargetStatus{
-				Name:        target.Name,
-				Kind:        target.Kind,
-				BackupState: formolv1alpha1.New,
-			})
-		}
-		switch target.Kind {
-		case "Task":
-			if err := r.CreateJob(target); err != nil {
-				log.V(0).Info("unable to create task", "task", target)
-				return ctrl.Result{}, err
-			}
-		}
-	}
+	//	for _, target := range r.BackupConf.Spec.Targets {
+	//		if !func(name string) bool {
+	//			for _, target := range r.BackupSession.Status.Targets {
+	//				if target.Name == name {
+	//					return true
+	//				}
+	//			}
+	//			return false
+	//		}(target.Name) {
+	//			r.BackupSession.Status.Targets = append(r.BackupSession.Status.Targets, formolv1alpha1.TargetStatus{
+	//				Name:        target.Name,
+	//				Kind:        target.Kind,
+	//				BackupState: formolv1alpha1.New,
+	//			})
+	//		}
+	//		switch target.Kind {
+	//		case "Task":
+	//			if err := r.CreateJob(target); err != nil {
+	//				log.V(0).Info("unable to create task", "task", target)
+	//				return ctrl.Result{}, err
+	//			}
+	//		}
+	//	}
 	if err := r.Status().Update(ctx, r.BackupSession); err != nil {
 		log.Error(err, "unable to update backupSession")
 		return ctrl.Result{}, err
 	}
+
 	// cleanup old backups
 	log.V(1).Info("try to cleanup old backups")
 	backupSessionList := &formolv1alpha1.BackupSessionList{}
 	if err := r.List(ctx, backupSessionList, client.InNamespace(r.BackupConf.Namespace), client.MatchingFieldsSelector{Selector: fields.SelectorFromSet(fields.Set{sessionState: "Success"})}); err != nil {
 		log.Error(err, "unable to get backupsessionlist")
-		return ctrl.Result{}, nil
+		return reschedule, nil
 	}
 	if len(backupSessionList.Items) < 2 {
 		// Not enough backupSession to proceed
 		log.V(1).Info("Not enough successful backup jobs")
-		return ctrl.Result{}, nil
+		return reschedule, nil
 	}
 
 	sort.Slice(backupSessionList.Items, func(i, j int) bool {
@@ -266,7 +314,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			}
 		}
 	}
-	return ctrl.Result{}, nil
+	return reschedule, nil
 }
 
 func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error {
