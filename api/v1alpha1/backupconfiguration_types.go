@@ -86,6 +86,7 @@ type BackupConfigurationStatus struct {
 
 // BackupConfiguration is the Schema for the backupconfigurations API
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName="bc"
 // +kubebuilder:subresource:status
 type BackupConfiguration struct {
 	metav1.TypeMeta   `json:",inline"`

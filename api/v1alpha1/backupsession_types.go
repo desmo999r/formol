@@ -76,6 +76,7 @@ type BackupSessionStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName="bs"
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Ref",type=string,JSONPath=`.spec.ref.name`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
