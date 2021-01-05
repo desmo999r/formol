@@ -303,7 +303,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				// we don't return anything, we keep going
 			}
 		} else {
-			session.Status.Keep = strings.Join(keep, ",") + " " + time.Now().Format("2006 Jan 02 15:04:05 -0700 MST")
+			session.Status.Keep = strings.Join(keep, ",") // + " " + time.Now().Format("2006 Jan 02 15:04:05 -0700 MST")
 			if err := r.Status().Update(ctx, &session); err != nil {
 				log.Error(err, "unable to update session status", "session", session)
 			}
