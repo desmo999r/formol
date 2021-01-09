@@ -235,14 +235,22 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 }
 
 func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.BackupConfiguration) error {
-	log := r.Log.WithName("addCronJob")
+	log := r.Log.WithValues("addCronJob", backupConf.Name)
 
 	cronjob := &kbatch_beta1.CronJob{}
 	if err := r.Get(context.Background(), client.ObjectKey{
 		Namespace: backupConf.Namespace,
 		Name:      "backup-" + backupConf.Name,
 	}, cronjob); err == nil {
-		log.V(0).Info("there is already a cronjob", "cronjob", cronjob, "backupconf", backupConf.Name)
+		log.V(0).Info("there is already a cronjob")
+		if backupConf.Spec.Schedule != cronjob.Spec.Schedule {
+			log.V(0).Info("cronjob schedule has changed", "old schedule", cronjob.Spec.Schedule, "new schedule", backupConf.Spec.Schedule)
+			cronjob.Spec.Schedule = backupConf.Spec.Schedule
+			if err := r.Update(context.TODO(), cronjob); err != nil {
+				log.Error(err, "unable to update cronjob definition")
+				return err
+			}
+		}
 		return nil
 	} else if errors.IsNotFound(err) == false {
 		log.Error(err, "something went wrong")
