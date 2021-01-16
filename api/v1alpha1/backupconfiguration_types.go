@@ -48,15 +48,6 @@ type Target struct {
 	// +optional
 	// +kubebuilder:validation:MinItems=1
 	Steps []Step `json:"steps,omitempty"`
-	// +optional
-	BeforeBackup []Hook `json:"beforeBackup,omitempty"`
-	// +optional
-	AfterBackup []Hook `json:"afterBackup,omitempty"`
-}
-
-type Hook struct {
-	Cmd string `json:"cmd"`
-	Args []string `json:"args"`
 }
 
 type Keep struct {
