@@ -105,102 +105,14 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 			log.V(0).Info("task is still running", "targetStatus", currentTargetStatus)
 		case formolv1alpha1.Success:
 			// The last task successed. Let's try to start the next one
-			log.V(0).Info("last task was a success. start a new one", "currentTargetStatus", currentTargetStatus, "targetStatus", currentTargetStatus)
 			targetStatus, err := startNextTask()
 			if err != nil {
 				return err
 			}
+			log.V(0).Info("last task was a success. start a new one", "currentTargetStatus", currentTargetStatus, "targetStatus", currentTargetStatus)
 			if targetStatus == nil {
 				// No more task to start. The backup is a success
 				r.BackupSession.Status.BackupState = formolv1alpha1.Success
-				log.V(0).Info("Backup is successful. Let's try to do some cleanup")
-				backupSessionList := &formolv1alpha1.BackupSessionList{}
-				if err := r.List(ctx, backupSessionList, client.InNamespace(r.BackupConf.Namespace), client.MatchingFieldsSelector{Selector: fields.SelectorFromSet(fields.Set{sessionState: "Success"})}); err != nil {
-					log.Error(err, "unable to get backupsessionlist")
-					return nil
-				}
-				if len(backupSessionList.Items) < 2 {
-					// Not enough backupSession to proceed
-					log.V(1).Info("Not enough successful backup jobs")
-					return nil
-				}
-
-				sort.Slice(backupSessionList.Items, func(i, j int) bool {
-					return backupSessionList.Items[i].Status.StartTime.Time.Unix() > backupSessionList.Items[j].Status.StartTime.Time.Unix()
-				})
-
-				type KeepBackup struct {
-					Counter int32
-					Last    time.Time
-				}
-
-				var lastBackups, dailyBackups, weeklyBackups, monthlyBackups, yearlyBackups KeepBackup
-				lastBackups.Counter = r.BackupConf.Spec.Keep.Last
-				dailyBackups.Counter = r.BackupConf.Spec.Keep.Daily
-				weeklyBackups.Counter = r.BackupConf.Spec.Keep.Weekly
-				monthlyBackups.Counter = r.BackupConf.Spec.Keep.Monthly
-				yearlyBackups.Counter = r.BackupConf.Spec.Keep.Yearly
-				for _, session := range backupSessionList.Items {
-					if session.Spec.Ref.Name != r.BackupConf.Name {
-						continue
-					}
-					deleteSession := true
-					keep := []string{}
-					if lastBackups.Counter > 0 {
-						log.V(1).Info("Keep backup", "last", session.Status.StartTime)
-						lastBackups.Counter--
-						keep = append(keep, "last")
-						deleteSession = false
-					}
-					if dailyBackups.Counter > 0 {
-						if session.Status.StartTime.Time.YearDay() != dailyBackups.Last.YearDay() {
-							log.V(1).Info("Keep backup", "daily", session.Status.StartTime)
-							dailyBackups.Counter--
-							dailyBackups.Last = session.Status.StartTime.Time
-							keep = append(keep, "daily")
-							deleteSession = false
-						}
-					}
-					if weeklyBackups.Counter > 0 {
-						if session.Status.StartTime.Time.Weekday().String() == "Sunday" && session.Status.StartTime.Time.YearDay() != weeklyBackups.Last.YearDay() {
-							log.V(1).Info("Keep backup", "weekly", session.Status.StartTime)
-							weeklyBackups.Counter--
-							weeklyBackups.Last = session.Status.StartTime.Time
-							keep = append(keep, "weekly")
-							deleteSession = false
-						}
-					}
-					if monthlyBackups.Counter > 0 {
-						if session.Status.StartTime.Time.Day() == 1 && session.Status.StartTime.Time.Month() != monthlyBackups.Last.Month() {
-							log.V(1).Info("Keep backup", "monthly", session.Status.StartTime)
-							monthlyBackups.Counter--
-							monthlyBackups.Last = session.Status.StartTime.Time
-							keep = append(keep, "monthly")
-							deleteSession = false
-						}
-					}
-					if yearlyBackups.Counter > 0 {
-						if session.Status.StartTime.Time.YearDay() == 1 && session.Status.StartTime.Time.Year() != yearlyBackups.Last.Year() {
-							log.V(1).Info("Keep backup", "yearly", session.Status.StartTime)
-							yearlyBackups.Counter--
-							yearlyBackups.Last = session.Status.StartTime.Time
-							keep = append(keep, "yearly")
-							deleteSession = false
-						}
-					}
-					if deleteSession {
-						log.V(1).Info("Delete session", "delete", session.Status.StartTime)
-						if err := r.Delete(ctx, &session); err != nil {
-							log.Error(err, "unable to delete backupsession", "session", session.Name)
-							// we don't return anything, we keep going
-						}
-					} else {
-						session.Status.Keep = strings.Join(keep, ",") // + " " + time.Now().Format("2006 Jan 02 15:04:05 -0700 MST")
-						if err := r.Status().Update(ctx, &session); err != nil {
-							log.Error(err, "unable to update session status", "session", session)
-						}
-					}
-				}
 			}
 		}
 		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
@@ -286,7 +198,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		}
 	} else if r.IsBackupOngoing() {
 		log.V(0).Info("there is an ongoing backup. let's reschedule the deletion of the backupsession")
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: 20 * time.Second}, nil
 	} else {
 		log.V(0).Info("backupsession being deleted", "backupsession", r.BackupSession.Name)
 		if controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
@@ -310,6 +222,93 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	// cleanup old backups
 	log.V(1).Info("try to cleanup old backups")
+	backupSessionList := &formolv1alpha1.BackupSessionList{}
+	if err := r.List(ctx, backupSessionList, client.InNamespace(r.BackupConf.Namespace), client.MatchingFieldsSelector{Selector: fields.SelectorFromSet(fields.Set{sessionState: "Success"})}); err != nil {
+		log.Error(err, "unable to get backupsessionlist")
+		return reschedule, nil
+	}
+	if len(backupSessionList.Items) < 2 {
+		// Not enough backupSession to proceed
+		log.V(1).Info("Not enough successful backup jobs")
+		return reschedule, nil
+	}
+
+	sort.Slice(backupSessionList.Items, func(i, j int) bool {
+		return backupSessionList.Items[i].Status.StartTime.Time.Unix() > backupSessionList.Items[j].Status.StartTime.Time.Unix()
+	})
+
+	type KeepBackup struct {
+		Counter int32
+		Last    time.Time
+	}
+
+	var lastBackups, dailyBackups, weeklyBackups, monthlyBackups, yearlyBackups KeepBackup
+	lastBackups.Counter = r.BackupConf.Spec.Keep.Last
+	dailyBackups.Counter = r.BackupConf.Spec.Keep.Daily
+	weeklyBackups.Counter = r.BackupConf.Spec.Keep.Weekly
+	monthlyBackups.Counter = r.BackupConf.Spec.Keep.Monthly
+	yearlyBackups.Counter = r.BackupConf.Spec.Keep.Yearly
+	for _, session := range backupSessionList.Items {
+		if session.Spec.Ref.Name != r.BackupConf.Name {
+			continue
+		}
+		deleteSession := true
+		keep := []string{}
+		if lastBackups.Counter > 0 {
+			log.V(1).Info("Keep backup", "last", session.Status.StartTime)
+			lastBackups.Counter--
+			keep = append(keep, "last")
+			deleteSession = false
+		}
+		if dailyBackups.Counter > 0 {
+			if session.Status.StartTime.Time.YearDay() != dailyBackups.Last.YearDay() {
+				log.V(1).Info("Keep backup", "daily", session.Status.StartTime)
+				dailyBackups.Counter--
+				dailyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "daily")
+				deleteSession = false
+			}
+		}
+		if weeklyBackups.Counter > 0 {
+			if session.Status.StartTime.Time.Weekday().String() == "Sunday" && session.Status.StartTime.Time.YearDay() != weeklyBackups.Last.YearDay() {
+				log.V(1).Info("Keep backup", "weekly", session.Status.StartTime)
+				weeklyBackups.Counter--
+				weeklyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "weekly")
+				deleteSession = false
+			}
+		}
+		if monthlyBackups.Counter > 0 {
+			if session.Status.StartTime.Time.Day() == 1 && session.Status.StartTime.Time.Month() != monthlyBackups.Last.Month() {
+				log.V(1).Info("Keep backup", "monthly", session.Status.StartTime)
+				monthlyBackups.Counter--
+				monthlyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "monthly")
+				deleteSession = false
+			}
+		}
+		if yearlyBackups.Counter > 0 {
+			if session.Status.StartTime.Time.YearDay() == 1 && session.Status.StartTime.Time.Year() != yearlyBackups.Last.Year() {
+				log.V(1).Info("Keep backup", "yearly", session.Status.StartTime)
+				yearlyBackups.Counter--
+				yearlyBackups.Last = session.Status.StartTime.Time
+				keep = append(keep, "yearly")
+				deleteSession = false
+			}
+		}
+		if deleteSession {
+			log.V(1).Info("Delete session", "delete", session.Status.StartTime)
+			if err := r.Delete(ctx, &session); err != nil {
+				log.Error(err, "unable to delete backupsession", "session", session.Name)
+				// we don't return anything, we keep going
+			}
+		} else {
+			session.Status.Keep = strings.Join(keep, ",") // + " " + time.Now().Format("2006 Jan 02 15:04:05 -0700 MST")
+			if err := r.Status().Update(ctx, &session); err != nil {
+				log.Error(err, "unable to update session status", "session", session)
+			}
+		}
+	}
 	return reschedule, nil
 }
 
