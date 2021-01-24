@@ -214,6 +214,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 		}
 	}
 	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
+	deployment.Spec.Template.Spec.ShareProcessNamespace = func() *bool { b := true; return &b }()
 
 	if err := formolrbac.CreateBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
 		log.Error(err, "unable to create backupsessionlistener RBAC")

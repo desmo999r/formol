@@ -35,10 +35,20 @@ type Step struct {
 	Env       []corev1.EnvVar `json:"env"`
 }
 
+type Hook struct {
+	Cmd string `json:"cmd"`
+	// +optional
+	Args []string `json:"args,omitempty"`
+}
+
 type Target struct {
 	// +kubebuilder:validation:Enum=Deployment;Task
 	Kind string `json:"kind"`
 	Name string `json:"name"`
+	// +optional
+	BeforeBackup []Hook `json:"beforeBackup,omitempty"`
+	// +optional
+	AfterBackup []Hook `json:"afterBackup,omitempty"`
 	// +optional
 	ApiVersion string `json:"apiVersion,omitempty"`
 	// +optional

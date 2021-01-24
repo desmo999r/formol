@@ -122,7 +122,7 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 				if len(backupSessionList.Items) < 2 {
 					// Not enough backupSession to proceed
 					log.V(1).Info("Not enough successful backup jobs")
-					return nil
+					break
 				}
 
 				sort.Slice(backupSessionList.Items, func(i, j int) bool {
@@ -203,6 +203,7 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 				}
 			}
 		}
+		log.V(1).Info("New BackupSession status", "status", r.BackupSession.Status.BackupState)
 		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
 			log.Error(err, "unable to update BackupSession status")
 			return err
@@ -276,7 +277,11 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if r.BackupSession.ObjectMeta.DeletionTimestamp.IsZero() {
+	if r.IsBackupOngoing() {
+		// There is already a backup ongoing. We don't do anything and we reschedule
+		log.V(0).Info("there is an ongoing backup. let's reschedule this operation")
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	} else if r.BackupSession.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
 			controllerutil.AddFinalizer(r.BackupSession, finalizerName)
 			if err := r.Update(ctx, r.BackupSession); err != nil {
@@ -284,9 +289,6 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				return ctrl.Result{}, err
 			}
 		}
-	} else if r.IsBackupOngoing() {
-		log.V(0).Info("there is an ongoing backup. let's reschedule the deletion of the backupsession")
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	} else {
 		log.V(0).Info("backupsession being deleted", "backupsession", r.BackupSession.Name)
 		if controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
@@ -308,8 +310,6 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, err
 	}
 
-	// cleanup old backups
-	log.V(1).Info("try to cleanup old backups")
 	return reschedule, nil
 }
 
