@@ -220,6 +220,10 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 		log.Error(err, "unable to create backupsessionlistener RBAC")
 		return nil
 	}
+	if err := formolrbac.CreateBackupSessionStatusUpdaterRBAC(r.Client, "default", backupConf.Namespace); err != nil {
+		log.Error(err, "unable to create backupsession-statusupdater RBAC")
+		return nil
+	}
 
 	log.V(0).Info("Adding a sicar container")
 	if err := r.Update(context.Background(), deployment); err != nil {
@@ -260,6 +264,10 @@ func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.Ba
 
 	if err := formolrbac.CreateBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
 		log.Error(err, "unable to create backupsession-creator RBAC")
+		return nil
+	}
+	if err := formolrbac.CreateBackupSessionStatusUpdaterRBAC(r.Client, "default", backupConf.Namespace); err != nil {
+		log.Error(err, "unable to create backupsession-statusupdater RBAC")
 		return nil
 	}
 
@@ -385,13 +393,19 @@ func (r *BackupConfigurationReconciler) deleteExternalResources(backupConf *form
 			if err := formolrbac.DeleteBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
 				return err
 			}
-			if err := formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
-				return err
-			}
 			if err := r.deleteSidecarContainer(backupConf, target); err != nil {
 				return err
 			}
+		case "Task":
+
 		}
+	}
+	// TODO: remove the hardcoded "default"
+	if err := formolrbac.DeleteBackupSessionStatusUpdaterRBAC(r.Client, "default", backupConf.Namespace); err != nil {
+		return err
+	}
+	if err := formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
+		return err
 	}
 	return nil
 }

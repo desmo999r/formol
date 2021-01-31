@@ -10,11 +10,13 @@ import (
 )
 
 const (
-	backupListenerRole              = "backup-listener-role"
-	backupListenerRoleBinding       = "backup-listener-rolebinding"
-	backupSessionCreatorSA          = "backupsession-creator"
-	backupSessionCreatorRole        = "backupsession-creator-role"
-	backupSessionCreatorRoleBinding = "backupsession-creator-rolebinding"
+	backupListenerRole                    = "backup-listener-role"
+	backupListenerRoleBinding             = "backup-listener-rolebinding"
+	backupSessionCreatorSA                = "backupsession-creator"
+	backupSessionCreatorRole              = "backupsession-creator-role"
+	backupSessionCreatorRoleBinding       = "backupsession-creator-rolebinding"
+	backupSessionStatusUpdaterRole        = "backupsession-statusupdater-role"
+	backupSessionStatusUpdaterRoleBinding = "backupsession-statusupdater-rolebinding"
 )
 
 func DeleteBackupSessionCreatorRBAC(cl client.Client, namespace string) error {
@@ -197,11 +199,6 @@ func CreateBackupSessionListenerRBAC(cl client.Client, saName string, namespace 
 				APIGroups: []string{"formol.desmojim.fr"},
 				Resources: []string{"backupsessions"},
 			},
-			rbacv1.PolicyRule{
-				Verbs:     []string{"get", "list", "watch", "patch", "update"},
-				APIGroups: []string{"formol.desmojim.fr"},
-				Resources: []string{"backupsessions/status"},
-			},
 		},
 	}
 	if err := cl.Get(context.Background(), client.ObjectKey{
@@ -232,6 +229,106 @@ func CreateBackupSessionListenerRBAC(cl client.Client, saName string, namespace 
 	if err := cl.Get(context.Background(), client.ObjectKey{
 		Namespace: namespace,
 		Name:      backupListenerRoleBinding,
+	}, rolebinding); err != nil && errors.IsNotFound(err) {
+		if err = cl.Create(context.Background(), rolebinding); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func DeleteBackupSessionStatusUpdaterRBAC(cl client.Client, saName string, namespace string) error {
+	if saName == "" {
+		saName = "default"
+	}
+	sa := &corev1.ServiceAccount{}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      saName,
+	}, sa); err != nil {
+		return err
+	}
+
+	role := &rbacv1.Role{}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      backupSessionStatusUpdaterRole,
+	}, role); err == nil {
+		if err = cl.Delete(context.Background(), role); err != nil {
+			return err
+		}
+	}
+
+	rolebinding := &rbacv1.RoleBinding{}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      backupSessionStatusUpdaterRoleBinding,
+	}, rolebinding); err == nil {
+		if err = cl.Delete(context.Background(), rolebinding); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func CreateBackupSessionStatusUpdaterRBAC(cl client.Client, saName string, namespace string) error {
+	if saName == "" {
+		saName = "default"
+	}
+	sa := &corev1.ServiceAccount{}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      saName,
+	}, sa); err != nil {
+		return err
+	}
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      backupSessionStatusUpdaterRole,
+		},
+		Rules: []rbacv1.PolicyRule{
+			rbacv1.PolicyRule{
+				Verbs:     []string{"get", "list", "watch", "patch", "update"},
+				APIGroups: []string{"formol.desmojim.fr"},
+				Resources: []string{"backupsessions/status"},
+			},
+			rbacv1.PolicyRule{
+				Verbs:     []string{"get", "list", "watch"},
+				APIGroups: []string{"formol.desmojim.fr"},
+				Resources: []string{"backupsessions"},
+			},
+		},
+	}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      backupSessionStatusUpdaterRole,
+	}, role); err != nil && errors.IsNotFound(err) {
+		if err = cl.Create(context.Background(), role); err != nil {
+			return err
+		}
+	}
+	rolebinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      backupSessionStatusUpdaterRoleBinding,
+		},
+		Subjects: []rbacv1.Subject{
+			rbacv1.Subject{
+				Kind: "ServiceAccount",
+				Name: saName,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     backupSessionStatusUpdaterRole,
+		},
+	}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      backupSessionStatusUpdaterRoleBinding,
 	}, rolebinding); err != nil && errors.IsNotFound(err) {
 		if err = cl.Create(context.Background(), rolebinding); err != nil {
 			return err
