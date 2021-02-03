@@ -23,24 +23,18 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type Ref struct {
-	Name string `json:"name"`
-}
-
-// BackupSessionSpec defines the desired state of BackupSession
-type BackupSessionSpec struct {
+// RestoreSessionSpec defines the desired state of RestoreSession
+type RestoreSessionSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of BackupSession. Edit BackupSession_types.go to remove/update
-	Ref `json:"ref"`
+	BackupSessionRef metav1.ObjectMeta `json:"backupSessionRef"`
 }
 
-// BackupSessionStatus defines the observed state of BackupSession
-type BackupSessionStatus struct {
+// RestoreSessionStatus defines the observed state of RestoreSession
+type RestoreSessionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// +optional
 	SessionState `json:"state,omitempty"`
@@ -48,36 +42,30 @@ type BackupSessionStatus struct {
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
 	Targets []TargetStatus `json:"target,omitempty"`
-	// +optional
-	Keep string `json:"keep,omitempty"`
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName="bs"
+// +kubebuilder:resource:shortName="rs"
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Ref",type=string,JSONPath=`.spec.ref.name`
-// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
-// +kubebuilder:printcolumn:name="Started",type=string,format=date-time,JSONPath=`.status.startTime`
-// +kubebuilder:printcolumn:name="Keep",type=string,JSONPath=`.status.keep`
 
-// BackupSession is the Schema for the backupsessions API
-type BackupSession struct {
+// RestoreSession is the Schema for the restoresessions API
+type RestoreSession struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BackupSessionSpec   `json:"spec,omitempty"`
-	Status BackupSessionStatus `json:"status,omitempty"`
+	Spec   RestoreSessionSpec   `json:"spec,omitempty"`
+	Status RestoreSessionStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// BackupSessionList contains a list of BackupSession
-type BackupSessionList struct {
+// RestoreSessionList contains a list of RestoreSession
+type RestoreSessionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []BackupSession `json:"items"`
+	Items           []RestoreSession `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&BackupSession{}, &BackupSessionList{})
+	SchemeBuilder.Register(&RestoreSession{}, &RestoreSessionList{})
 }
