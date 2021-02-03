@@ -159,6 +159,10 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 					},
 				},
 			},
+			corev1.EnvVar{
+				Name:  "POD_DEPLOYMENT",
+				Value: target.Name,
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{},
 	}
