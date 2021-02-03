@@ -60,16 +60,16 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 		if nextTarget < len(r.BackupConf.Spec.Targets) {
 			target := r.BackupConf.Spec.Targets[nextTarget]
 			targetStatus := formolv1alpha1.TargetStatus{
-				Name:        target.Name,
-				Kind:        target.Kind,
-				BackupState: formolv1alpha1.New,
+				Name:         target.Name,
+				Kind:         target.Kind,
+				SessionState: formolv1alpha1.New,
 			}
 			r.BackupSession.Status.Targets = append(r.BackupSession.Status.Targets, targetStatus)
 			switch target.Kind {
 			case "Task":
-				if err := r.CreateJob(target); err != nil {
+				if err := r.CreateBackupJob(target); err != nil {
 					log.V(0).Info("unable to create task", "task", target)
-					targetStatus.BackupState = formolv1alpha1.Failure
+					targetStatus.SessionState = formolv1alpha1.Failure
 					return nil, err
 				}
 			}
@@ -79,10 +79,10 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 		}
 	}
 	// Test the backupsession backupstate to decide what to do
-	switch r.BackupSession.Status.BackupState {
+	switch r.BackupSession.Status.SessionState {
 	case formolv1alpha1.New:
 		// Brand new backupsession; start the first task
-		r.BackupSession.Status.BackupState = formolv1alpha1.Running
+		r.BackupSession.Status.SessionState = formolv1alpha1.Running
 		targetStatus, err := startNextTask()
 		if err != nil {
 			return err
@@ -95,11 +95,11 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 	case formolv1alpha1.Running:
 		// Backup ongoing. Check the status of the last task to decide what to do
 		currentTargetStatus := r.BackupSession.Status.Targets[len(r.BackupSession.Status.Targets)-1]
-		switch currentTargetStatus.BackupState {
+		switch currentTargetStatus.SessionState {
 		case formolv1alpha1.Failure:
 			// The last task failed. We mark the backupsession as failed and we stop here.
 			log.V(0).Info("last backup task failed. Stop here", "targetStatus", currentTargetStatus)
-			r.BackupSession.Status.BackupState = formolv1alpha1.Failure
+			r.BackupSession.Status.SessionState = formolv1alpha1.Failure
 		case formolv1alpha1.Running:
 			// The current task is still running. Nothing to do
 			log.V(0).Info("task is still running", "targetStatus", currentTargetStatus)
@@ -112,7 +112,7 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 			}
 			if targetStatus == nil {
 				// No more task to start. The backup is a success
-				r.BackupSession.Status.BackupState = formolv1alpha1.Success
+				r.BackupSession.Status.SessionState = formolv1alpha1.Success
 				log.V(0).Info("Backup is successful. Let's try to do some cleanup")
 				backupSessionList := &formolv1alpha1.BackupSessionList{}
 				if err := r.List(ctx, backupSessionList, client.InNamespace(r.BackupConf.Namespace), client.MatchingFieldsSelector{Selector: fields.SelectorFromSet(fields.Set{sessionState: "Success"})}); err != nil {
@@ -203,14 +203,14 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 				}
 			}
 		}
-		log.V(1).Info("New BackupSession status", "status", r.BackupSession.Status.BackupState)
+		log.V(1).Info("New BackupSession status", "status", r.BackupSession.Status.SessionState)
 		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
 			log.Error(err, "unable to update BackupSession status")
 			return err
 		}
 	case formolv1alpha1.Deleted:
 		for _, target := range r.BackupSession.Status.Targets {
-			if target.BackupState != formolv1alpha1.Deleted {
+			if target.SessionState != formolv1alpha1.Deleted {
 				log.V(1).Info("snaphot has not been deleted. won't delete the backupsession", "target", target)
 				return nil
 			}
@@ -264,7 +264,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, r.StatusUpdate()
 	}
 	r.BackupSession.Status.ObservedGeneration = r.BackupSession.ObjectMeta.Generation
-	r.BackupSession.Status.BackupState = formolv1alpha1.New
+	r.BackupSession.Status.SessionState = formolv1alpha1.New
 	// Prepare the next schedule to start the first task
 	reschedule := ctrl.Result{RequeueAfter: 5 * time.Second}
 
@@ -313,8 +313,8 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	return reschedule, nil
 }
 
-func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error {
-	log := r.Log.WithValues("createjob", target.Name)
+func (r *BackupSessionReconciler) CreateBackupJob(target formolv1alpha1.Target) error {
+	log := r.Log.WithValues("createbackupjob", target.Name)
 	ctx := context.Background()
 	backupSessionEnv := []corev1.EnvVar{
 		corev1.EnvVar{
@@ -342,7 +342,7 @@ func (r *BackupSessionReconciler) CreateJob(target formolv1alpha1.Target) error 
 		VolumeMounts: []corev1.VolumeMount{output},
 		Env:          backupSessionEnv,
 	}
-	log.V(1).Info("creating a tagget backup job", "container", restic)
+	log.V(1).Info("creating a tagged backup job", "container", restic)
 	// Gather information from the repo
 	repo := &formolv1alpha1.Repo{}
 	if err := r.Get(ctx, client.ObjectKey{
@@ -414,7 +414,7 @@ func (r *BackupSessionReconciler) deleteExternalResources() error {
 	// container that will delete the restic snapshot(s) matching the backupsession
 	deleteSnapshots := []corev1.Container{}
 	for _, target := range r.BackupSession.Status.Targets {
-		if target.BackupState == formolv1alpha1.Success {
+		if target.SessionState == formolv1alpha1.Success {
 			deleteSnapshots = append(deleteSnapshots, corev1.Container{
 				Name:  target.Name,
 				Image: "desmo999r/formolcli:latest",
@@ -454,7 +454,7 @@ func (r *BackupSessionReconciler) deleteExternalResources() error {
 func (r *BackupSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &formolv1alpha1.BackupSession{}, sessionState, func(rawObj runtime.Object) []string {
 		session := rawObj.(*formolv1alpha1.BackupSession)
-		return []string{string(session.Status.BackupState)}
+		return []string{string(session.Status.SessionState)}
 	}); err != nil {
 		return err
 	}
