@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	formolrbac "github.com/desmo999r/formol/pkg/rbac"
 	formolutils "github.com/desmo999r/formol/pkg/utils"
@@ -54,16 +55,15 @@ func (r *BackupConfigurationReconciler) getDeployment(namespace string, name str
 	return deployment, err
 }
 
-// +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupconfigurations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupconfigurations/status,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions/status,verbs=get;list;watch
-// +kubebuilder:rbac:groups=formol.desmojim.fr,resources=repoes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=formol.desmojim.fr,resources=*,verbs=*
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=replicasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=cronjobs/status,verbs=get
 
@@ -135,7 +135,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	sidecar := corev1.Container{
 		Name:  "backup",
 		Image: "desmo999r/formolcli:latest",
-		Args:  []string{"create", "server"},
+		Args:  []string{"backupsession", "server"},
 		//Image: "busybox",
 		//Command: []string{
 		//	"sh",
@@ -190,7 +190,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	}
 	log.V(1).Info("getting pods matching label", "label", selector)
 	pods := &corev1.PodList{}
-	err = r.List(context.Background(), pods, client.MatchingLabels(selector))
+	err = r.List(context.Background(), pods, client.InNamespace(backupConf.Namespace), client.MatchingLabels(selector))
 	if err != nil {
 		log.Error(err, "unable to get deployment pods")
 		return nil
@@ -220,12 +220,8 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
 	deployment.Spec.Template.Spec.ShareProcessNamespace = func() *bool { b := true; return &b }()
 
-	if err := formolrbac.CreateBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
+	if err := formolrbac.CreateFormolRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
 		log.Error(err, "unable to create backupsessionlistener RBAC")
-		return nil
-	}
-	if err := formolrbac.CreateBackupSessionStatusUpdaterRBAC(r.Client, "default", backupConf.Namespace); err != nil {
-		log.Error(err, "unable to create backupsession-statusupdater RBAC")
 		return nil
 	}
 
@@ -266,10 +262,11 @@ func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.Ba
 		return err
 	}
 
-	if err := formolrbac.CreateBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
-		log.Error(err, "unable to create backupsession-creator RBAC")
+	if err := formolrbac.CreateFormolRBAC(r.Client, "default", backupConf.Namespace); err != nil {
+		log.Error(err, "unable to create backupsessionlistener RBAC")
 		return nil
 	}
+
 	if err := formolrbac.CreateBackupSessionStatusUpdaterRBAC(r.Client, "default", backupConf.Namespace); err != nil {
 		log.Error(err, "unable to create backupsession-statusupdater RBAC")
 		return nil
@@ -293,8 +290,8 @@ func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.Ba
 									Name:  "job-createbackupsession-" + backupConf.Name,
 									Image: "desmo999r/formolcli:latest",
 									Args: []string{
-										"create",
 										"backupsession",
+										"create",
 										"--namespace",
 										backupConf.Namespace,
 										"--name",
@@ -323,6 +320,7 @@ func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.Ba
 func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("backupconfiguration", req.NamespacedName)
+	time.Sleep(300 * time.Millisecond)
 
 	log.V(1).Info("Enter Reconcile with req", "req", req)
 
@@ -394,7 +392,7 @@ func (r *BackupConfigurationReconciler) deleteExternalResources(backupConf *form
 			if err != nil {
 				return err
 			}
-			if err := formolrbac.DeleteBackupSessionListenerRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
+			if err := formolrbac.DeleteFormolRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
 				return err
 			}
 			if err := r.deleteSidecarContainer(backupConf, target); err != nil {
@@ -405,6 +403,9 @@ func (r *BackupConfigurationReconciler) deleteExternalResources(backupConf *form
 		}
 	}
 	// TODO: remove the hardcoded "default"
+	if err := formolrbac.DeleteFormolRBAC(r.Client, "default", backupConf.Namespace); err != nil {
+		return err
+	}
 	if err := formolrbac.DeleteBackupSessionStatusUpdaterRBAC(r.Client, "default", backupConf.Namespace); err != nil {
 		return err
 	}

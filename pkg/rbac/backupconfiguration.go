@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	formolRole                            = "formol-sidecar-role"
 	backupListenerRole                    = "backup-listener-role"
 	backupListenerRoleBinding             = "backup-listener-rolebinding"
 	backupSessionCreatorSA                = "backupsession-creator"
@@ -162,6 +163,104 @@ func DeleteBackupSessionListenerRBAC(cl client.Client, saName string, namespace 
 	return nil
 }
 
+func DeleteFormolRBAC(cl client.Client, saName string, namespace string) error {
+	if saName == "" {
+		saName = "default"
+	}
+	formolRoleBinding := namespace + "-" + saName + "-formol-sidecar-rolebinding"
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: formolRoleBinding,
+		},
+		Subjects: []rbacv1.Subject{
+			rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Namespace: namespace,
+				Name:      saName,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     formolRole,
+		},
+	}
+	if err := cl.Delete(context.Background(), clusterRoleBinding); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	return nil
+}
+
+func CreateFormolRBAC(cl client.Client, saName string, namespace string) error {
+	if saName == "" {
+		saName = "default"
+	}
+	sa := &corev1.ServiceAccount{}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      saName,
+	}, sa); err != nil {
+		return err
+	}
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: formolRole,
+		},
+		Rules: []rbacv1.PolicyRule{
+			rbacv1.PolicyRule{
+				Verbs:     []string{"*"},
+				APIGroups: []string{"formol.desmojim.fr"},
+				Resources: []string{"*"},
+				//APIGroups: []string{"formol.desmojim.fr"},
+				//Resources: []string{"restoresessions", "backupsessions", "backupconfigurations"},
+			},
+			rbacv1.PolicyRule{
+				Verbs:     []string{"get", "list", "watch"},
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+			},
+			rbacv1.PolicyRule{
+				Verbs:     []string{"get", "list", "watch"},
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments", "replicasets"},
+			},
+		},
+	}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Name: formolRole,
+	}, clusterRole); err != nil && errors.IsNotFound(err) {
+		if err = cl.Create(context.Background(), clusterRole); err != nil {
+			return err
+		}
+	}
+	formolRoleBinding := namespace + "-" + saName + "-formol-rolebinding"
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: formolRoleBinding,
+		},
+		Subjects: []rbacv1.Subject{
+			rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Namespace: namespace,
+				Name:      saName,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     formolRole,
+		},
+	}
+	if err := cl.Get(context.Background(), client.ObjectKey{
+		Name: formolRoleBinding,
+	}, clusterRoleBinding); err != nil && errors.IsNotFound(err) {
+		if err = cl.Create(context.Background(), clusterRoleBinding); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func CreateBackupSessionListenerRBAC(cl client.Client, saName string, namespace string) error {
 	if saName == "" {
 		saName = "default"
@@ -192,12 +291,12 @@ func CreateBackupSessionListenerRBAC(cl client.Client, saName string, namespace 
 			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch"},
 				APIGroups: []string{"formol.desmojim.fr"},
-				Resources: []string{"backupsessions", "backupconfigurations"},
+				Resources: []string{"restoresessions", "backupsessions", "backupconfigurations"},
 			},
 			rbacv1.PolicyRule{
 				Verbs:     []string{"update", "delete"},
 				APIGroups: []string{"formol.desmojim.fr"},
-				Resources: []string{"backupsessions"},
+				Resources: []string{"restoresessions", "backupsessions"},
 			},
 		},
 	}
@@ -234,6 +333,7 @@ func CreateBackupSessionListenerRBAC(cl client.Client, saName string, namespace 
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -292,12 +392,12 @@ func CreateBackupSessionStatusUpdaterRBAC(cl client.Client, saName string, names
 			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch", "patch", "update"},
 				APIGroups: []string{"formol.desmojim.fr"},
-				Resources: []string{"backupsessions/status"},
+				Resources: []string{"restoresessions/status", "backupsessions/status"},
 			},
 			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch"},
 				APIGroups: []string{"formol.desmojim.fr"},
-				Resources: []string{"backupsessions"},
+				Resources: []string{"restoresessions", "backupsessions"},
 			},
 		},
 	}
