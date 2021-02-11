@@ -63,6 +63,7 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 				Name:         target.Name,
 				Kind:         target.Kind,
 				SessionState: formolv1alpha1.New,
+				StartTime:    &metav1.Time{Time: time.Now()},
 			}
 			r.BackupSession.Status.Targets = append(r.BackupSession.Status.Targets, targetStatus)
 			switch target.Kind {
@@ -247,7 +248,6 @@ func (r *BackupSessionReconciler) IsBackupOngoing() bool {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
 
 func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	time.Sleep(100 * time.Millisecond)
 	log := r.Log.WithValues("backupsession", req.NamespacedName)
 	ctx := context.Background()
 
@@ -338,7 +338,7 @@ func (r *BackupSessionReconciler) CreateBackupJob(target formolv1alpha1.Target) 
 	restic := corev1.Container{
 		Name:         "restic",
 		Image:        "desmo999r/formolcli:latest",
-		Args:         []string{"backup", "volume", "--tag", r.BackupSession.Name, "--path", "/output"},
+		Args:         []string{"volume", "backup", "--tag", r.BackupSession.Name, "--path", "/output"},
 		VolumeMounts: []corev1.VolumeMount{output},
 		Env:          backupSessionEnv,
 	}
@@ -418,7 +418,7 @@ func (r *BackupSessionReconciler) deleteExternalResources() error {
 			deleteSnapshots = append(deleteSnapshots, corev1.Container{
 				Name:  target.Name,
 				Image: "desmo999r/formolcli:latest",
-				Args:  []string{"delete", "snapshot", "--snapshot", target.SnapshotId},
+				Args:  []string{"snapshot", "delete", "--snapshot-id", target.SnapshotId},
 				Env:   env,
 			})
 		}
