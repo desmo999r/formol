@@ -81,4 +81,4 @@ metadata:
 spec:
   name: backup-pg
   image: desmo999r/formolcli:latest
-  args: ["backup", "postgres", "--hostname", $(PGHOST), "--database", $(PGDATABASE), "--username", $(PGUSER), "--password", $(PGPASSWD), "--file", "/output/backup-pg.sql"]
+  args: ["postgres", "backup", "--hostname", $(PGHOST), "--database", $(PGDATABASE), "--username", $(PGUSER), "--password", $(PGPASSWD), "--file", "/output/backup-pg.sql"]
