@@ -257,6 +257,13 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		log.Error(err, "unable to get backupsession")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	r.BackupConf = &formolv1alpha1.BackupConfiguration{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: r.BackupSession.Namespace,
+		Name:      r.BackupSession.Spec.Ref.Name}, r.BackupConf); err != nil {
+		log.Error(err, "unable to get backupConfiguration")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 	log.V(0).Info("backupSession", "backupSession.ObjectMeta", r.BackupSession.ObjectMeta, "backupSession.Status", r.BackupSession.Status)
 	if r.BackupSession.Status.ObservedGeneration == r.BackupSession.ObjectMeta.Generation {
 		// status update
@@ -269,14 +276,6 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	reschedule := ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	r.BackupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
-	r.BackupConf = &formolv1alpha1.BackupConfiguration{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Namespace: r.BackupSession.Namespace,
-		Name:      r.BackupSession.Spec.Ref.Name}, r.BackupConf); err != nil {
-		log.Error(err, "unable to get backupConfiguration")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
 	if r.IsBackupOngoing() {
 		// There is already a backup ongoing. We don't do anything and we reschedule
 		log.V(0).Info("there is an ongoing backup. let's reschedule this operation")

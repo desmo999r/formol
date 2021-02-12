@@ -214,16 +214,6 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		log.Error(err, "unable to get restoresession")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	if r.RestoreSession.Status.ObservedGeneration == r.RestoreSession.ObjectMeta.Generation {
-		// status update
-		log.V(0).Info("status update")
-		return ctrl.Result{}, r.StatusUpdate()
-	}
-	r.RestoreSession.Status.ObservedGeneration = r.RestoreSession.ObjectMeta.Generation
-	r.RestoreSession.Status.SessionState = formolv1alpha1.New
-	r.RestoreSession.Status.StartTime = &metav1.Time{Time: time.Now()}
-	reschedule := ctrl.Result{RequeueAfter: 5 * time.Second}
-
 	r.BackupSession = &formolv1alpha1.BackupSession{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: r.RestoreSession.Spec.BackupSessionRef.Namespace,
@@ -238,6 +228,16 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		log.Error(err, "unable to get backupConfiguration")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	if r.RestoreSession.Status.ObservedGeneration == r.RestoreSession.ObjectMeta.Generation {
+		// status update
+		log.V(0).Info("status update")
+		return ctrl.Result{}, r.StatusUpdate()
+	}
+	r.RestoreSession.Status.ObservedGeneration = r.RestoreSession.ObjectMeta.Generation
+	r.RestoreSession.Status.SessionState = formolv1alpha1.New
+	r.RestoreSession.Status.StartTime = &metav1.Time{Time: time.Now()}
+	reschedule := ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
 		log.Error(err, "unable to update restoresession")

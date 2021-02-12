@@ -263,7 +263,12 @@ func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.Ba
 	}
 
 	if err := formolrbac.CreateFormolRBAC(r.Client, "default", backupConf.Namespace); err != nil {
-		log.Error(err, "unable to create backupsessionlistener RBAC")
+		log.Error(err, "unable to create formol RBAC")
+		return nil
+	}
+
+	if err := formolrbac.CreateBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
+		log.Error(err, "unable to create backupsession creattor RBAC")
 		return nil
 	}
 
