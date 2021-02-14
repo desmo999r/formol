@@ -168,18 +168,26 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 	}
 	switch r.RestoreSession.Status.SessionState {
 	case formolv1alpha1.New:
-		r.RestoreSession.Status.SessionState = formolv1alpha1.Running
 		targetStatus, err := startNextTask()
 		if err != nil {
 			return err
 		}
-		log.V(0).Info("New restore. Start the first task", "task", targetStatus.Name)
+		log.V(0).Info("New restore. Start the first task", "target", targetStatus)
+		r.RestoreSession.Status.SessionState = formolv1alpha1.Running
+		if err = r.Status().Update(ctx, r.RestoreSession); err != nil {
+			log.Error(err, "unable to update restoresession")
+			return err
+		}
 	case formolv1alpha1.Running:
 		currentTargetStatus := r.RestoreSession.Status.Targets[len(r.RestoreSession.Status.Targets)-1]
 		switch currentTargetStatus.SessionState {
 		case formolv1alpha1.Failure:
 			log.V(0).Info("last restore task failed. Stop here", "target", currentTargetStatus.Name)
 			r.RestoreSession.Status.SessionState = formolv1alpha1.Failure
+			if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
+				log.Error(err, "unable to update restoresession")
+				return err
+			}
 		case formolv1alpha1.Running:
 			log.V(0).Info("task is still running", "target", currentTargetStatus.Name)
 			return nil
@@ -191,13 +199,14 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 			}
 			if targetStatus == nil {
 				// No more task to start. The restore is over
+				log.V(0).Info("No more task to run. Restore is over")
 				r.RestoreSession.Status.SessionState = formolv1alpha1.Success
 			}
+			if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
+				log.Error(err, "unable to update restoresession")
+				return err
+			}
 		}
-	}
-	if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
-		log.Error(err, "unable to update restoresession")
-		return err
 	}
 	return nil
 }
@@ -206,6 +215,7 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=restoresessions/status,verbs=get;update;patch
 
 func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	time.Sleep(500 * time.Millisecond)
 	ctx := context.Background()
 	log := r.Log.WithValues("restoresession", req.NamespacedName)
 
@@ -230,10 +240,12 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	if r.RestoreSession.Status.ObservedGeneration == r.RestoreSession.ObjectMeta.Generation {
-		// status update
+		// status update. the restore has already started and the status got updated.
+		// let's see what happened and figure out what are the next actions
 		log.V(0).Info("status update")
 		return ctrl.Result{}, r.StatusUpdate()
 	}
+	// a new restore session has been created.
 	r.RestoreSession.Status.ObservedGeneration = r.RestoreSession.ObjectMeta.Generation
 	r.RestoreSession.Status.SessionState = formolv1alpha1.New
 	r.RestoreSession.Status.StartTime = &metav1.Time{Time: time.Now()}
@@ -241,7 +253,7 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
 		log.Error(err, "unable to update restoresession")
-		return ctrl.Result{}, err
+		return reschedule, err
 	}
 
 	return reschedule, nil
