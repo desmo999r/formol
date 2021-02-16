@@ -23,16 +23,6 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type BackupState string
-
-const (
-	New     BackupState = "New"
-	Running BackupState = "Running"
-	Success BackupState = "Success"
-	Failure BackupState = "Failure"
-	Deleted BackupState = "Deleted"
-)
-
 type Ref struct {
 	Name string `json:"name"`
 }
@@ -46,19 +36,6 @@ type BackupSessionSpec struct {
 	Ref `json:"ref"`
 }
 
-type TargetStatus struct {
-	Name string `json:"name"`
-	Kind string `json:"kind"`
-	// +optional
-	BackupState `json:"state,omitempty"`
-	// +optional
-	SnapshotId string `json:"snapshotId,omitempty"`
-	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-	// +optional
-	Duration *metav1.Duration `json:"duration,omitempty"`
-}
-
 // BackupSessionStatus defines the observed state of BackupSession
 type BackupSessionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -66,7 +43,7 @@ type BackupSessionStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// +optional
-	BackupState `json:"state,omitempty"`
+	SessionState `json:"state,omitempty"`
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
