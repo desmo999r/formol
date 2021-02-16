@@ -26,6 +26,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	formoldesmojimfrv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 	"github.com/desmo999r/formol/controllers"
 	// +kubebuilder:scaffold:imports
@@ -40,6 +41,7 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = formolv1alpha1.AddToScheme(scheme)
+	_ = formoldesmojimfrv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -91,6 +93,14 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "BackupConfiguration")
 			os.Exit(1)
 		}
+	}
+	if err = (&controllers.RestoreSessionReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("RestoreSession"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RestoreSession")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
