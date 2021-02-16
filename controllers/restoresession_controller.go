@@ -145,7 +145,7 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 	startNextTask := func() (*formolv1alpha1.TargetStatus, error) {
 		nextTarget := len(r.RestoreSession.Status.Targets)
 		if nextTarget < len(r.BackupConf.Spec.Targets) {
-			target := r.BackupConf.Spec.Targets[len(r.BackupConf.Spec.Targets)-1-nextTarget]
+			target := r.BackupConf.Spec.Targets[nextTarget]
 			targetStatus := formolv1alpha1.TargetStatus{
 				Name:         target.Name,
 				Kind:         target.Kind,
@@ -256,7 +256,7 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		return reschedule, err
 	}
 
-	return reschedule, nil
+	return ctrl.Result{}, nil
 }
 
 func (r *RestoreSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
