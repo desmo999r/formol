@@ -7,11 +7,14 @@ import (
 type SessionState string
 
 const (
-	New     SessionState = "New"
-	Running SessionState = "Running"
-	Success SessionState = "Success"
-	Failure SessionState = "Failure"
-	Deleted SessionState = "Deleted"
+	New                      SessionState = "New"
+	Running                  SessionState = "Running"
+	Success                  SessionState = "Success"
+	Failure                  SessionState = "Failure"
+	Deleted                  SessionState = "Deleted"
+	TARGET_NAME              string       = "TARGET_NAME"
+	RESTORESESSION_NAMESPACE string       = "RESTORESESSION_NAMESPACE"
+	RESTORESESSION_NAME      string       = "RESTORESESSION_NAME"
 )
 
 type TargetStatus struct {
