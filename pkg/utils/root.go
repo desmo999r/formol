@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+const (
+	FORMOLCLI string = "desmo999r/formolcli:latest"
+)
+
 func ContainsString(slice []string, s string) bool {
 	for _, item := range slice {
 		if item == s {
