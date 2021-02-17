@@ -194,6 +194,10 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 		case formolv1alpha1.Failure:
 			log.V(0).Info("last restore task failed. Stop here", "target", currentTargetStatus.Name)
 			r.RestoreSession.Status.SessionState = formolv1alpha1.Failure
+			if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
+				log.Error(err, "unable to update restoresession")
+				return err
+			}
 		case formolv1alpha1.Running:
 			log.V(0).Info("task is still running", "target", currentTargetStatus.Name)
 			return nil
@@ -206,12 +210,12 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 			if targetStatus == nil {
 				// No more task to start. The restore is over
 				r.RestoreSession.Status.SessionState = formolv1alpha1.Success
+				if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
+					log.Error(err, "unable to update restoresession")
+					return err
+				}
 			}
 		}
-	}
-	if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
-		log.Error(err, "unable to update restoresession")
-		return err
 	}
 	return nil
 }
