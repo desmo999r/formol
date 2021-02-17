@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -143,7 +144,90 @@ func (r *RestoreSessionReconciler) CreateRestoreJob(target formolv1alpha1.Target
 	return nil
 }
 
+func (r *RestoreSessionReconciler) DeleteRestoreInitContainer(target formolv1alpha1.Target) error {
+	log := r.Log.WithValues("createrestoreinitcontainer", target.Name)
+	ctx := context.Background()
+	deployment := &appsv1.Deployment{}
+	if err := r.Get(context.Background(), client.ObjectKey{
+		Namespace: r.BackupConf.Namespace,
+		Name:      target.Name,
+	}, deployment); err != nil {
+		log.Error(err, "unable to get deployment")
+		return err
+	}
+	log.V(1).Info("got deployment", "namespace", deployment.Namespace, "name", deployment.Name)
+	newInitContainers := []corev1.Container{}
+	for _, initContainer := range deployment.Spec.Template.Spec.InitContainers {
+		if initContainer.Name == RESTORESESSION {
+			log.V(0).Info("Found our restoresession container. Removing it from the list of init containers", "container", initContainer)
+		} else {
+			newInitContainers = append(newInitContainers, initContainer)
+		}
+	}
+	deployment.Spec.Template.Spec.InitContainers = newInitContainers
+	if err := r.Update(ctx, deployment); err != nil {
+		log.Error(err, "unable to update deployment")
+		return err
+	}
+	return nil
+}
+
 func (r *RestoreSessionReconciler) CreateRestoreInitContainer(target formolv1alpha1.Target) error {
+	log := r.Log.WithValues("createrestoreinitcontainer", target.Name)
+	ctx := context.Background()
+	var snapshotId string
+	for _, targetStatus := range r.BackupSession.Status.Targets {
+		if targetStatus.Name == target.Name && targetStatus.Kind == target.Kind {
+			snapshotId = targetStatus.SnapshotId
+		}
+	}
+	deployment := &appsv1.Deployment{}
+	if err := r.Get(context.Background(), client.ObjectKey{
+		Namespace: r.BackupConf.Namespace,
+		Name:      target.Name,
+	}, deployment); err != nil {
+		log.Error(err, "unable to get deployment")
+		return err
+	}
+	log.V(1).Info("got deployment", "namespace", deployment.Namespace, "name", deployment.Name)
+	restoreSessionEnv := []corev1.EnvVar{
+		corev1.EnvVar{
+			Name:  formolv1alpha1.TARGET_NAME,
+			Value: target.Name,
+		},
+		corev1.EnvVar{
+			Name:  formolv1alpha1.RESTORESESSION_NAME,
+			Value: r.RestoreSession.Name,
+		},
+		corev1.EnvVar{
+			Name:  formolv1alpha1.RESTORESESSION_NAMESPACE,
+			Value: r.RestoreSession.Namespace,
+		},
+	}
+	initContainer := corev1.Container{
+		Name:         RESTORESESSION,
+		Image:        formolutils.FORMOLCLI,
+		Args:         []string{"volume", "restore", "--snapshot-id", snapshotId},
+		VolumeMounts: target.VolumeMounts,
+		Env:          restoreSessionEnv,
+	}
+	repo := &formolv1alpha1.Repo{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: r.BackupConf.Namespace,
+		Name:      r.BackupConf.Spec.Repository.Name,
+	}, repo); err != nil {
+		log.Error(err, "unable to get Repo from BackupConfiguration")
+		return err
+	}
+	// S3 backing storage
+	initContainer.Env = append(initContainer.Env, formolutils.ConfigureResticEnvVar(r.BackupConf, repo)...)
+	deployment.Spec.Template.Spec.InitContainers = append([]corev1.Container{initContainer},
+		deployment.Spec.Template.Spec.InitContainers...)
+	if err := r.Update(ctx, deployment); err != nil {
+		log.Error(err, "unable to update deployment")
+		return err
+	}
+
 	return nil
 }
 
@@ -180,6 +264,17 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 			return nil, nil
 		}
 	}
+	endTask := func() error {
+		target := r.BackupConf.Spec.Targets[len(r.RestoreSession.Status.Targets)-1]
+		switch target.Kind {
+		case "Deployment":
+			if err := r.DeleteRestoreInitContainer(target); err != nil {
+				log.Error(err, "unable to delete restore init container")
+				return err
+			}
+		}
+		return nil
+	}
 	switch r.RestoreSession.Status.SessionState {
 	case formolv1alpha1.New:
 		r.RestoreSession.Status.SessionState = formolv1alpha1.Running
@@ -202,6 +297,7 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 			log.V(0).Info("task is still running", "target", currentTargetStatus.Name)
 			return nil
 		case formolv1alpha1.Success:
+			_ = endTask()
 			log.V(0).Info("last task was a success. start a new one", "target", currentTargetStatus)
 			targetStatus, err := startNextTask()
 			if err != nil {
