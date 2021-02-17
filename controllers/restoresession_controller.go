@@ -34,6 +34,10 @@ import (
 	formolutils "github.com/desmo999r/formol/pkg/utils"
 )
 
+var (
+	RESTORESESSION = "restoresession"
+)
+
 // RestoreSessionReconciler reconciles a RestoreSession object
 type RestoreSessionReconciler struct {
 	client.Client
