@@ -35,8 +35,9 @@ import (
 	formolutils "github.com/desmo999r/formol/pkg/utils"
 )
 
-var (
-	RESTORESESSION = "restoresession"
+const (
+	RESTORESESSION string = "restoresession"
+	UPDATESTATUS   string = "updatestatus"
 )
 
 // RestoreSessionReconciler reconciles a RestoreSession object
@@ -175,21 +176,27 @@ func (r *RestoreSessionReconciler) DeleteRestoreInitContainer(target formolv1alp
 func (r *RestoreSessionReconciler) CreateRestoreInitContainer(target formolv1alpha1.Target) error {
 	log := r.Log.WithValues("createrestoreinitcontainer", target.Name)
 	ctx := context.Background()
-	var snapshotId string
-	for _, targetStatus := range r.BackupSession.Status.Targets {
-		if targetStatus.Name == target.Name && targetStatus.Kind == target.Kind {
-			snapshotId = targetStatus.SnapshotId
-		}
-	}
 	deployment := &appsv1.Deployment{}
 	if err := r.Get(context.Background(), client.ObjectKey{
-		Namespace: r.BackupConf.Namespace,
+		Namespace: r.RestoreSession.Namespace,
 		Name:      target.Name,
 	}, deployment); err != nil {
 		log.Error(err, "unable to get deployment")
 		return err
 	}
 	log.V(1).Info("got deployment", "namespace", deployment.Namespace, "name", deployment.Name)
+	for _, initContainer := range deployment.Spec.Template.Spec.InitContainers {
+		if initContainer.Name == RESTORESESSION {
+			log.V(0).Info("there is already a restoresession initcontainer", "deployment", deployment.Spec.Template.Spec.InitContainers)
+			return nil
+		}
+	}
+	var snapshotId string
+	for _, targetStatus := range r.BackupSession.Status.Targets {
+		if targetStatus.Name == target.Name && targetStatus.Kind == target.Kind {
+			snapshotId = targetStatus.SnapshotId
+		}
+	}
 	restoreSessionEnv := []corev1.EnvVar{
 		corev1.EnvVar{
 			Name:  formolv1alpha1.TARGET_NAME,
@@ -283,6 +290,10 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 			return err
 		}
 		log.V(0).Info("New restore. Start the first task", "task", targetStatus.Name)
+		if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
+			log.Error(err, "unable to update restoresession")
+			return err
+		}
 	case formolv1alpha1.Running:
 		currentTargetStatus := r.RestoreSession.Status.Targets[len(r.RestoreSession.Status.Targets)-1]
 		switch currentTargetStatus.SessionState {
@@ -311,6 +322,10 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 					return err
 				}
 			}
+			if err := r.Status().Update(ctx, r.RestoreSession); err != nil {
+				log.Error(err, "unable to update restoresession")
+				return err
+			}
 		}
 	}
 	return nil
@@ -320,7 +335,7 @@ func (r *RestoreSessionReconciler) StatusUpdate() error {
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=restoresessions/status,verbs=get;update;patch
 
 func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	ctx := context.Background()
 	log := r.Log.WithValues("restoresession", req.NamespacedName)
 
