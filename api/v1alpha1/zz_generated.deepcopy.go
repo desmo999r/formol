@@ -105,6 +105,11 @@ func (in *BackupConfigurationList) DeepCopyObject() runtime.Object {
 func (in *BackupConfigurationSpec) DeepCopyInto(out *BackupConfigurationSpec) {
 	*out = *in
 	out.Repository = in.Repository
+	if in.Suspend != nil {
+		in, out := &in.Suspend, &out.Suspend
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Targets != nil {
 		in, out := &in.Targets, &out.Targets
 		*out = make([]Target, len(*in))

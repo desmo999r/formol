@@ -77,6 +77,9 @@ type BackupConfigurationSpec struct {
 	Repository `json:"repository"`
 
 	// +optional
+	Suspend *bool `json:"suspend,omitempty"`
+
+	// +optional
 	Schedule string `json:"schedule,omitempty"`
 	// +kubebuilder:validation:MinItems=1
 	Targets []Target `json:"targets"`
