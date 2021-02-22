@@ -40,7 +40,7 @@ import (
 const (
 	sessionState  string = ".metadata.state"
 	finalizerName string = "finalizer.backupsession.formol.desmojim.fr"
-	JOBTTL int32 = 7200
+	JOBTTL        int32  = 7200
 )
 
 // BackupSessionReconciler reconciles a BackupSession object
@@ -361,13 +361,14 @@ func (r *BackupSessionReconciler) CreateBackupJob(target formolv1alpha1.Target) 
 	}
 	// S3 backing storage
 	restic.Env = append(restic.Env, formolutils.ConfigureResticEnvVar(r.BackupConf, repo)...)
+	jobTtl := JOBTTL
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%s-%s-", r.BackupSession.Name, target.Name),
 			Namespace:    r.BackupConf.Namespace,
 		},
 		Spec: batchv1.JobSpec{
-			TTLSecondsAfterFinished: &JOBTTL,
+			TTLSecondsAfterFinished: &jobTtl,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{},
@@ -431,13 +432,14 @@ func (r *BackupSessionReconciler) deleteExternalResources() error {
 	}
 	// create a job to delete the restic snapshot(s) with the backupsession name tag
 	if len(deleteSnapshots) > 0 {
+		jobTtl := JOBTTL
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: fmt.Sprintf("delete-%s-", r.BackupSession.Name),
 				Namespace:    r.BackupSession.Namespace,
 			},
 			Spec: batchv1.JobSpec{
-				TTLSecondsAfterFinished: &JOBTTL,
+				TTLSecondsAfterFinished: &jobTtl,
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						InitContainers: []corev1.Container{},
