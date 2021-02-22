@@ -102,6 +102,11 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 			// The last task failed. We mark the backupsession as failed and we stop here.
 			log.V(0).Info("last backup task failed. Stop here", "targetStatus", currentTargetStatus)
 			r.BackupSession.Status.SessionState = formolv1alpha1.Failure
+			log.V(1).Info("New BackupSession status", "status", r.BackupSession.Status.SessionState)
+			if err := r.Status().Update(ctx, r.BackupSession); err != nil {
+				log.Error(err, "unable to update BackupSession status")
+				return err
+			}
 		case formolv1alpha1.Running:
 			// The current task is still running. Nothing to do
 			log.V(0).Info("task is still running", "targetStatus", currentTargetStatus)
@@ -204,11 +209,11 @@ func (r *BackupSessionReconciler) StatusUpdate() error {
 					}
 				}
 			}
-		}
-		log.V(1).Info("New BackupSession status", "status", r.BackupSession.Status.SessionState)
-		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
-			log.Error(err, "unable to update BackupSession status")
-			return err
+			log.V(1).Info("New BackupSession status", "status", r.BackupSession.Status.SessionState)
+			if err := r.Status().Update(ctx, r.BackupSession); err != nil {
+				log.Error(err, "unable to update BackupSession status")
+				return err
+			}
 		}
 	case formolv1alpha1.Deleted:
 		for _, target := range r.BackupSession.Status.Targets {
