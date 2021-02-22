@@ -37,9 +37,10 @@ import (
 	formolutils "github.com/desmo999r/formol/pkg/utils"
 )
 
-var (
-	sessionState  = ".metadata.state"
-	finalizerName = "finalizer.backupsession.formol.desmojim.fr"
+const (
+	sessionState  string = ".metadata.state"
+	finalizerName string = "finalizer.backupsession.formol.desmojim.fr"
+	JOBTTL int32 = 7200
 )
 
 // BackupSessionReconciler reconciles a BackupSession object
@@ -353,7 +354,6 @@ func (r *BackupSessionReconciler) CreateBackupJob(target formolv1alpha1.Target) 
 		return err
 	}
 	// S3 backing storage
-	var ttl int32 = 300
 	restic.Env = append(restic.Env, formolutils.ConfigureResticEnvVar(r.BackupConf, repo)...)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -361,7 +361,7 @@ func (r *BackupSessionReconciler) CreateBackupJob(target formolv1alpha1.Target) 
 			Namespace:    r.BackupConf.Namespace,
 		},
 		Spec: batchv1.JobSpec{
-			TTLSecondsAfterFinished: &ttl,
+			TTLSecondsAfterFinished: &JOBTTL,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{},
@@ -425,14 +425,13 @@ func (r *BackupSessionReconciler) deleteExternalResources() error {
 	}
 	// create a job to delete the restic snapshot(s) with the backupsession name tag
 	if len(deleteSnapshots) > 0 {
-		var ttl int32 = 300
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: fmt.Sprintf("delete-%s-", r.BackupSession.Name),
 				Namespace:    r.BackupSession.Namespace,
 			},
 			Spec: batchv1.JobSpec{
-				TTLSecondsAfterFinished: &ttl,
+				TTLSecondsAfterFinished: &JOBTTL,
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						InitContainers: []corev1.Container{},
