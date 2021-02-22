@@ -258,6 +258,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	ctx := context.Background()
 
 	// your logic here
+	time.Sleep(300 * time.Millisecond)
 	r.BackupSession = &formolv1alpha1.BackupSession{}
 	if err := r.Get(ctx, req.NamespacedName, r.BackupSession); err != nil {
 		log.Error(err, "unable to get backupsession")
