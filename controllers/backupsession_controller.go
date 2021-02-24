@@ -55,6 +55,14 @@ type BackupSessionReconciler struct {
 func (r *BackupSessionReconciler) StatusUpdate() error {
 	log := r.Log.WithValues("backupsession-statusupdate", r.BackupSession)
 	ctx := context.Background()
+	r.BackupConf = &formolv1alpha1.BackupConfiguration{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: r.BackupSession.Namespace,
+		Name:      r.BackupSession.Spec.Ref.Name}, r.BackupConf); err != nil {
+		log.Error(err, "unable to get backupConfiguration")
+		return client.IgnoreNotFound(err)
+	}
+
 	// start the next task
 	startNextTask := func() (*formolv1alpha1.TargetStatus, error) {
 		nextTarget := len(r.BackupSession.Status.Targets)
@@ -258,7 +266,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	ctx := context.Background()
 
 	// your logic here
-	time.Sleep(300 * time.Millisecond)
+	//time.Sleep(300 * time.Millisecond)
 	r.BackupSession = &formolv1alpha1.BackupSession{}
 	if err := r.Get(ctx, req.NamespacedName, r.BackupSession); err != nil {
 		log.Error(err, "unable to get backupsession")
@@ -270,32 +278,33 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		log.V(0).Info("status update")
 		return ctrl.Result{}, r.StatusUpdate()
 	}
-	r.BackupSession.Status.ObservedGeneration = r.BackupSession.ObjectMeta.Generation
-	r.BackupSession.Status.SessionState = formolv1alpha1.New
-	// Prepare the next schedule to start the first task
-	reschedule := ctrl.Result{RequeueAfter: 5 * time.Second}
-
-	r.BackupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
-	r.BackupConf = &formolv1alpha1.BackupConfiguration{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Namespace: r.BackupSession.Namespace,
-		Name:      r.BackupSession.Spec.Ref.Name}, r.BackupConf); err != nil {
-		log.Error(err, "unable to get backupConfiguration")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
 	if r.IsBackupOngoing() {
 		// There is already a backup ongoing. We don't do anything and we reschedule
 		log.V(0).Info("there is an ongoing backup. let's reschedule this operation")
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	} else if r.BackupSession.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Check if the finalizer has been registered
 		if !controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
 			controllerutil.AddFinalizer(r.BackupSession, finalizerName)
-			if err := r.Update(ctx, r.BackupSession); err != nil {
+			// We update the BackupSession to add the finalizer
+			// Reconcile will be called again
+			// return now
+			err := r.Update(ctx, r.BackupSession)
+			if err != nil {
 				log.Error(err, "unable to add finalizer")
-				return ctrl.Result{}, err
 			}
+			return ctrl.Result{}, err
 		}
+		// All signals are green
+		// We start the backup process
+		r.BackupSession.Status.ObservedGeneration = r.BackupSession.ObjectMeta.Generation
+		r.BackupSession.Status.SessionState = formolv1alpha1.New
+		r.BackupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
+		if err := r.Status().Update(ctx, r.BackupSession); err != nil {
+			log.Error(err, "unable to update backupSession")
+			return ctrl.Result{}, err
+		}
+
 	} else {
 		log.V(0).Info("backupsession being deleted", "backupsession", r.BackupSession.Name)
 		if controllerutil.ContainsFinalizer(r.BackupSession, finalizerName) {
@@ -311,13 +320,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		// We have been deleted. Return here
 		return ctrl.Result{}, nil
 	}
-
-	if err := r.Status().Update(ctx, r.BackupSession); err != nil {
-		log.Error(err, "unable to update backupSession")
-		return ctrl.Result{}, err
-	}
-
-	return reschedule, nil
+	return ctrl.Result{}, nil
 }
 
 func (r *BackupSessionReconciler) CreateBackupJob(target formolv1alpha1.Target) error {
