@@ -357,7 +357,7 @@ func (r *BackupSessionReconciler) CreateBackupJob(target formolv1alpha1.Target) 
 	repo := &formolv1alpha1.Repo{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: r.BackupConf.Namespace,
-		Name:      r.BackupConf.Spec.Repository.Name,
+		Name:      r.BackupConf.Spec.Repository,
 	}, repo); err != nil {
 		log.Error(err, "unable to get Repo from BackupConfiguration")
 		return err
@@ -415,7 +415,7 @@ func (r *BackupSessionReconciler) deleteExternalResources() error {
 	repo := &formolv1alpha1.Repo{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: r.BackupConf.Namespace,
-		Name:      r.BackupConf.Spec.Repository.Name,
+		Name:      r.BackupConf.Spec.Repository,
 	}, repo); err != nil {
 		log.Error(err, "unable to get Repo from BackupConfiguration")
 		return err

@@ -171,7 +171,7 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	repo := &formolv1alpha1.Repo{}
 	if err := r.Get(context.Background(), client.ObjectKey{
 		Namespace: backupConf.Namespace,
-		Name:      backupConf.Spec.Repository.Name,
+		Name:      backupConf.Spec.Repository,
 	}, repo); err != nil {
 		log.Error(err, "unable to get Repo from BackupConfiguration")
 		return err

@@ -5,8 +5,7 @@ metadata:
   name: backup-demo
   namespace: demo
 spec:
-  repository:
-    name: repo-minio
+  repository: repo-minio
   schedule: "15 * * * *"
   targets:
   - kind: Deployment
