@@ -62,10 +62,6 @@ type Keep struct {
 
 // BackupConfigurationSpec defines the desired state of BackupConfiguration
 type BackupConfigurationSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of BackupConfiguration. Edit BackupConfiguration_types.go to remove/update
 	Repository string `json:"repository"`
 
 	// +optional
