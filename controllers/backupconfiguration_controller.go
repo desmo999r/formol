@@ -83,6 +83,9 @@ func (r *BackupConfigurationReconciler) deleteSidecarContainer(backupConf *formo
 	if err := r.Update(context.Background(), deployment); err != nil {
 		return err
 	}
+	if err := formolrbac.DeleteFormolRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
+		return err
+	}
 	selector, err := metav1.LabelSelectorAsMap(deployment.Spec.Selector)
 	if err != nil {
 		return nil
@@ -334,7 +337,6 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 
 	log.V(1).Info("Enter Reconcile with req", "req", req)
 
-	// your logic here
 	backupConf := &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, req.NamespacedName, backupConf); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -353,9 +355,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	} else {
 		log.V(0).Info("backupconf being deleted", "backupconf", backupConf.Name)
 		if formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
-			if err := r.deleteExternalResources(backupConf); err != nil {
-				return ctrl.Result{}, err
-			}
+			_ = r.deleteExternalResources(backupConf)
 		}
 		backupConf.ObjectMeta.Finalizers = formolutils.RemoveString(backupConf.ObjectMeta.Finalizers, finalizerName)
 		if err := r.Update(context.Background(), backupConf); err != nil {
@@ -363,6 +363,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 		// We have been deleted. Return here
+		log.V(0).Info("backupconf deleted", "backupconf", backupConf.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -375,7 +376,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		switch target.Kind {
 		case "Deployment":
 			if err := r.addSidecarContainer(backupConf, target); err != nil {
-				return ctrl.Result{}, nil
+				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
 			backupConf.Status.ActiveSidecar = true
 		case "PersistentVolumeClaim":
@@ -398,31 +399,12 @@ func (r *BackupConfigurationReconciler) deleteExternalResources(backupConf *form
 	for _, target := range backupConf.Spec.Targets {
 		switch target.Kind {
 		case "Deployment":
-			deployment, err := r.getDeployment(backupConf.Namespace, target.Name)
-			if err != nil {
-				return err
-			}
-			if err := formolrbac.DeleteFormolRBAC(r.Client, deployment.Spec.Template.Spec.ServiceAccountName, deployment.Namespace); err != nil {
-				return err
-			}
-			if err := formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
-				return err
-			}
-			if err := r.deleteSidecarContainer(backupConf, target); err != nil {
-				return err
-			}
+			_ = r.deleteSidecarContainer(backupConf, target)
 		}
 	}
 	// TODO: remove the hardcoded "default"
-	if err := formolrbac.DeleteFormolRBAC(r.Client, "default", backupConf.Namespace); err != nil {
-		return err
-	}
-	if err := formolrbac.DeleteBackupSessionStatusUpdaterRBAC(r.Client, "default", backupConf.Namespace); err != nil {
-		return err
-	}
-	if err := formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace); err != nil {
-		return err
-	}
+	_ = formolrbac.DeleteFormolRBAC(r.Client, "default", backupConf.Namespace)
+	_ = formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace)
 	return nil
 }
 
