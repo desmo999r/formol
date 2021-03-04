@@ -242,6 +242,21 @@ func (r *BackupConfigurationReconciler) addSidecarContainer(backupConf *formolv1
 	return nil
 }
 
+func (r *BackupConfigurationReconciler) deleteCronJob(backupConf *formolv1alpha1.BackupConfiguration) error {
+	log := r.Log.WithValues("deleteCronJob", backupConf.Name)
+	_ = formolrbac.DeleteFormolRBAC(r.Client, "default", backupConf.Namespace)
+	_ = formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace)
+	cronjob := &kbatch_beta1.CronJob{}
+	if err := r.Get(context.Background(), client.ObjectKey{
+		Namespace: backupConf.Namespace,
+		Name:      "backup-" + backupConf.Name,
+	}, cronjob); err == nil {
+		log.V(0).Info("Deleting cronjob", "cronjob", cronjob.Name)
+		return r.Delete(context.TODO(), cronjob)
+	} else {
+		return err
+	}
+}
 func (r *BackupConfigurationReconciler) addCronJob(backupConf *formolv1alpha1.BackupConfiguration) error {
 	log := r.Log.WithValues("addCronJob", backupConf.Name)
 
@@ -403,8 +418,7 @@ func (r *BackupConfigurationReconciler) deleteExternalResources(backupConf *form
 		}
 	}
 	// TODO: remove the hardcoded "default"
-	_ = formolrbac.DeleteFormolRBAC(r.Client, "default", backupConf.Namespace)
-	_ = formolrbac.DeleteBackupSessionCreatorRBAC(r.Client, backupConf.Namespace)
+	_ = r.deleteCronJob(backupConf)
 	return nil
 }
 
