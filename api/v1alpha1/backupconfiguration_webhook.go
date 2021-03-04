@@ -44,7 +44,8 @@ func (r *BackupConfiguration) Default() {
 
 	// TODO(user): fill in your defaulting logic.
 	if r.Spec.Suspend == nil {
-		r.Spec.Suspend = new(bool)
+		suspend := false
+		r.Spec.Suspend = &suspend
 	}
 }
 
