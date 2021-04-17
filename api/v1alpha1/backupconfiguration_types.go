@@ -21,10 +21,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	SidecarKind   string = "Sidecar"
+	JobKind       string = "Job"
+	BackupVolumes string = "Volumes"
+)
+
 type Step struct {
-	Name      string          `json:"name"`
-	Namespace string          `json:"namespace"`
-	Env       []corev1.EnvVar `json:"env"`
+	Name string `json:"name"`
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// +optional
+	Finalize *bool `json:"finalize,omitempty"`
 }
 
 type Hook struct {
@@ -34,13 +42,9 @@ type Hook struct {
 }
 
 type Target struct {
-	// +kubebuilder:validation:Enum=Deployment;Task
+	// +kubebuilder:validation:Enum=Sidecar;Job
 	Kind string `json:"kind"`
 	Name string `json:"name"`
-	// +optional
-	BeforeBackup []Hook `json:"beforeBackup,omitempty"`
-	// +optional
-	AfterBackup []Hook `json:"afterBackup,omitempty"`
 	// +optional
 	ApiVersion string `json:"apiVersion,omitempty"`
 	// +optional
@@ -50,6 +54,8 @@ type Target struct {
 	// +optional
 	// +kubebuilder:validation:MinItems=1
 	Steps []Step `json:"steps,omitempty"`
+	// +kubebuilder:default:=2
+	Retry int `json:"retry,omitempty"`
 }
 
 type Keep struct {

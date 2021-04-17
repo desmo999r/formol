@@ -23,25 +23,15 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type Ref struct {
-	Name string `json:"name"`
-}
-
 // BackupSessionSpec defines the desired state of BackupSession
 type BackupSessionSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of BackupSession. Edit BackupSession_types.go to remove/update
-	Ref `json:"ref"`
+	Ref string `json:"ref"`
 }
 
 // BackupSessionStatus defines the observed state of BackupSession
 type BackupSessionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// +optional
 	SessionState `json:"state,omitempty"`
 	// +optional

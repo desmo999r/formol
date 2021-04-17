@@ -102,6 +102,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "RestoreSession")
 		os.Exit(1)
 	}
+	if err = (&formoldesmojimfrv1alpha1.Function{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Function")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

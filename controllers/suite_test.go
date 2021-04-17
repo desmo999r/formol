@@ -44,12 +44,18 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 const (
-	BackupFuncName = "test-backup-func"
-	TestNamespace  = "test-namespace"
-	RepoName       = "test-repo"
-	DeploymentName = "test-deployment"
-	timeout        = time.Second * 10
-	interval       = time.Millisecond * 250
+	TestBackupFuncName    = "test-backup-func"
+	TestFunc              = "test-norestore-func"
+	TestRestoreFuncName   = "test-restore-func"
+	TestNamespace         = "test-namespace"
+	TestRepoName          = "test-repo"
+	TestDeploymentName    = "test-deployment"
+	TestBackupConfName    = "test-backupconf"
+	TestBackupSessionName = "test-backupsession"
+	TestDataVolume        = "data"
+	TestDataMountPath     = "/data"
+	timeout               = time.Second * 10
+	interval              = time.Millisecond * 250
 )
 
 var cfg *rest.Config
@@ -64,7 +70,7 @@ var (
 	}
 	deployment = &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      DeploymentName,
+			Name:      TestDeploymentName,
 			Namespace: TestNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -80,6 +86,11 @@ var (
 						corev1.Container{
 							Name:  "test-container",
 							Image: "test-image",
+						},
+					},
+					Volumes: []corev1.Volume{
+						corev1.Volume{
+							Name: TestDataVolume,
 						},
 					},
 				},
@@ -105,7 +116,7 @@ var (
 	}
 	repo = &formolv1alpha1.Repo{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      RepoName,
+			Name:      TestRepoName,
 			Namespace: TestNamespace,
 		},
 		Spec: formolv1alpha1.RepoSpec{
@@ -120,13 +131,95 @@ var (
 	}
 	function = &formolv1alpha1.Function{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      BackupFuncName,
+			Name:      TestFunc,
+			Namespace: TestNamespace,
+		},
+		Spec: corev1.Container{
+			Name:  "norestore-func",
+			Image: "myimage",
+			Args:  []string{"a", "set", "of", "args"},
+		},
+	}
+	backupFunc = &formolv1alpha1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TestRestoreFuncName,
+			Namespace: TestNamespace,
+		},
+		Spec: corev1.Container{
+			Name:  "restore-func",
+			Image: "myimage",
+			Args:  []string{"a", "set", "of", "args"},
+		},
+	}
+	restoreFunc = &formolv1alpha1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TestBackupFuncName,
 			Namespace: TestNamespace,
 		},
 		Spec: corev1.Container{
 			Name:  "backup-func",
 			Image: "myimage",
 			Args:  []string{"a", "set", "of", "args"},
+		},
+	}
+	testBackupConf = &formolv1alpha1.BackupConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TestBackupConfName,
+			Namespace: TestNamespace,
+		},
+		Spec: formolv1alpha1.BackupConfigurationSpec{
+			Repository: TestRepoName,
+			Schedule:   "1 * * * *",
+			Keep: formolv1alpha1.Keep{
+				Last: 2,
+			},
+			Targets: []formolv1alpha1.Target{
+				formolv1alpha1.Target{
+					Kind: formolv1alpha1.SidecarKind,
+					Name: TestDeploymentName,
+					Steps: []formolv1alpha1.Step{
+						formolv1alpha1.Step{
+							Name: TestFunc,
+						},
+					},
+					Paths: []string{
+						TestDataMountPath,
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						corev1.VolumeMount{
+							Name:      TestDataVolume,
+							MountPath: TestDataMountPath,
+						},
+					},
+				},
+				formolv1alpha1.Target{
+					Kind: formolv1alpha1.JobKind,
+					Name: TestBackupFuncName,
+					Steps: []formolv1alpha1.Step{
+						formolv1alpha1.Step{
+							Name: TestFunc,
+						},
+						formolv1alpha1.Step{
+							Name: TestBackupFuncName,
+							Env: []corev1.EnvVar{
+								corev1.EnvVar{
+									Name:  "foo",
+									Value: "bar",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	testBackupSession = &formolv1alpha1.BackupSession{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TestBackupSessionName,
+			Namespace: TestNamespace,
+		},
+		Spec: formolv1alpha1.BackupSessionSpec{
+			Ref: TestBackupConfName,
 		},
 	}
 )
@@ -168,6 +261,20 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	err = (&BackupSessionReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+		Log:    ctrl.Log.WithName("controllers").WithName("BackupSession"),
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&RestoreSessionReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+		Log:    ctrl.Log.WithName("controllers").WithName("RestoreSession"),
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
@@ -182,6 +289,32 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient.Create(ctx, repo)).Should(Succeed())
 	Expect(k8sClient.Create(ctx, deployment)).Should(Succeed())
 	Expect(k8sClient.Create(ctx, function)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, backupFunc)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, restoreFunc)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, testBackupConf)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, testBackupSession)).Should(Succeed())
+	Eventually(func() error {
+		return k8sClient.Get(ctx, client.ObjectKey{
+			Name:      TestBackupSessionName,
+			Namespace: TestNamespace,
+		}, testBackupSession)
+	}, timeout, interval).Should(Succeed())
+	testBackupSession.Status.SessionState = formolv1alpha1.Success
+	testBackupSession.Status.Targets = []formolv1alpha1.TargetStatus{
+		formolv1alpha1.TargetStatus{
+			Name:         TestDeploymentName,
+			Kind:         formolv1alpha1.SidecarKind,
+			SessionState: formolv1alpha1.Success,
+			SnapshotId:   "12345abcdef",
+		},
+		formolv1alpha1.TargetStatus{
+			Name:         TestBackupFuncName,
+			Kind:         formolv1alpha1.JobKind,
+			SessionState: formolv1alpha1.Success,
+			SnapshotId:   "67890ghijk",
+		},
+	}
+	Expect(k8sClient.Status().Update(ctx, testBackupSession)).Should(Succeed())
 }, 60)
 
 var _ = AfterSuite(func() {

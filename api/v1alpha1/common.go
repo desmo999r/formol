@@ -7,14 +7,24 @@ import (
 type SessionState string
 
 const (
-	New                      SessionState = "New"
-	Running                  SessionState = "Running"
-	Success                  SessionState = "Success"
-	Failure                  SessionState = "Failure"
-	Deleted                  SessionState = "Deleted"
-	TARGET_NAME              string       = "TARGET_NAME"
-	RESTORESESSION_NAMESPACE string       = "RESTORESESSION_NAMESPACE"
-	RESTORESESSION_NAME      string       = "RESTORESESSION_NAME"
+	New      SessionState = "New"
+	Init     SessionState = "Initializing"
+	Running  SessionState = "Running"
+	Finalize SessionState = "Finalizing"
+	Success  SessionState = "Success"
+	Failure  SessionState = "Failure"
+	Deleted  SessionState = "Deleted"
+	// Environment variables used by the sidecar container
+	// the name of the sidecar container
+	SIDECARCONTAINER_NAME string = "formol"
+	// Used by both the backupsession and restoresession controllers to identified the target deployment
+	TARGET_NAME string = "TARGET_NAME"
+	// Used by restoresession controller
+	RESTORESESSION_NAMESPACE string = "RESTORESESSION_NAMESPACE"
+	RESTORESESSION_NAME      string = "RESTORESESSION_NAME"
+	// Used by the backupsession controller
+	POD_NAME      string = "POD_NAME"
+	POD_NAMESPACE string = "POD_NAMESPACE"
 )
 
 type TargetStatus struct {
@@ -28,4 +38,6 @@ type TargetStatus struct {
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 	// +optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
+	// +optional
+	Try int `json:"try,omitemmpty"`
 }

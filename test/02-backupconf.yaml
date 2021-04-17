@@ -8,7 +8,7 @@ spec:
   repository: repo-minio
   schedule: "15 * * * *"
   targets:
-  - kind: Deployment
+  - kind: Sidecar
     apiVersion: v1
     name: nginx-deployment
     volumeMounts:
@@ -16,11 +16,10 @@ spec:
         mountPath: /data
     paths:
       - /data
-  - kind: Task
+  - kind: Job
     name: backup-pg
     steps:
       - name: backup-pg
-        namespace: demo
         env:
           - name: PGHOST
             value: postgres

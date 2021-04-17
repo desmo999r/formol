@@ -5,7 +5,7 @@ import (
 	//"k8s.io/apimachinery/pkg/types"
 	//"reflect"
 	//"fmt"
-	//"time"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -21,11 +21,11 @@ import (
 
 var _ = Describe("Testing BackupConf controller", func() {
 	const (
-		BackupConfName = "test-backupconf"
+		BCBackupConfName = "test-backupconf-controller"
 	)
 	var (
 		key = types.NamespacedName{
-			Name:      BackupConfName,
+			Name:      BCBackupConfName,
 			Namespace: TestNamespace,
 		}
 		ctx        = context.Background()
@@ -35,24 +35,32 @@ var _ = Describe("Testing BackupConf controller", func() {
 	BeforeEach(func() {
 		backupConf = &formolv1alpha1.BackupConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      BackupConfName,
+				Name:      BCBackupConfName,
 				Namespace: TestNamespace,
 			},
 			Spec: formolv1alpha1.BackupConfigurationSpec{
-				Repository: RepoName,
+				Repository: TestRepoName,
 				Schedule:   "1 * * * *",
 				Targets: []formolv1alpha1.Target{
 					formolv1alpha1.Target{
-						Kind: "Deployment",
-						Name: DeploymentName,
+						Kind: formolv1alpha1.SidecarKind,
+						Name: TestDeploymentName,
+						VolumeMounts: []corev1.VolumeMount{
+							corev1.VolumeMount{
+								Name:      TestDataVolume,
+								MountPath: TestDataMountPath,
+							},
+						},
+						Paths: []string{
+							TestDataMountPath,
+						},
 					},
 					formolv1alpha1.Target{
-						Kind: "Task",
-						Name: BackupFuncName,
+						Kind: formolv1alpha1.JobKind,
+						Name: TestBackupFuncName,
 						Steps: []formolv1alpha1.Step{
 							formolv1alpha1.Step{
-								Name:      BackupFuncName,
-								Namespace: TestNamespace,
+								Name: TestBackupFuncName,
 								Env: []corev1.EnvVar{
 									corev1.EnvVar{
 										Name:  "foo",
@@ -66,7 +74,7 @@ var _ = Describe("Testing BackupConf controller", func() {
 			},
 		}
 	})
-	Context("There is a backupconf", func() {
+	Context("Creating a backupconf", func() {
 		JustBeforeEach(func() {
 			Eventually(func() error {
 				return k8sClient.Create(ctx, backupConf)
@@ -85,18 +93,16 @@ var _ = Describe("Testing BackupConf controller", func() {
 				return true
 			}, timeout, interval).Should(BeTrue())
 			Expect(realBackupConf.Spec.Schedule).Should(Equal("1 * * * *"))
+			Expect(realBackupConf.Spec.Targets[0].Retry).Should(Equal(2))
 		})
 		It("Should also create a CronJob", func() {
 			cronJob := &batchv1beta1.CronJob{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "backup-" + BackupConfName,
+					Name:      "backup-" + BCBackupConfName,
 					Namespace: TestNamespace,
 				}, cronJob)
-				if err != nil {
-					return false
-				}
-				return true
+				return err == nil
 			}, timeout, interval).Should(BeTrue())
 			Expect(cronJob.Spec.Schedule).Should(Equal("1 * * * *"))
 		})
@@ -104,7 +110,7 @@ var _ = Describe("Testing BackupConf controller", func() {
 			realDeployment := &appsv1.Deployment{}
 			Eventually(func() (int, error) {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      DeploymentName,
+					Name:      TestDeploymentName,
 					Namespace: TestNamespace,
 				}, realDeployment)
 				if err != nil {
@@ -115,6 +121,7 @@ var _ = Describe("Testing BackupConf controller", func() {
 		})
 		It("Should also update the CronJob", func() {
 			realBackupConf := &formolv1alpha1.BackupConfiguration{}
+			time.Sleep(300 * time.Millisecond)
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, key, realBackupConf)
 				if err != nil {
@@ -129,7 +136,7 @@ var _ = Describe("Testing BackupConf controller", func() {
 			cronJob := &batchv1beta1.CronJob{}
 			Eventually(func() (string, error) {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "backup-" + BackupConfName,
+					Name:      "backup-" + BCBackupConfName,
 					Namespace: TestNamespace,
 				}, cronJob)
 				if err != nil {
@@ -139,7 +146,7 @@ var _ = Describe("Testing BackupConf controller", func() {
 			}, timeout, interval).Should(Equal("1 0 * * *"))
 			Eventually(func() (bool, error) {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "backup-" + BackupConfName,
+					Name:      "backup-" + BCBackupConfName,
 					Namespace: TestNamespace,
 				}, cronJob)
 				if err != nil {
@@ -160,7 +167,7 @@ var _ = Describe("Testing BackupConf controller", func() {
 			realDeployment := &appsv1.Deployment{}
 			Eventually(func() (int, error) {
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      DeploymentName,
+					Name:      TestDeploymentName,
 					Namespace: TestNamespace,
 				}, realDeployment)
 				if err != nil {
