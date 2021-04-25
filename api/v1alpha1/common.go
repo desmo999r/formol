@@ -15,6 +15,7 @@ const (
 	Failure  SessionState = "Failure"
 	Deleted  SessionState = "Deleted"
 	// Environment variables used by the sidecar container
+	RESTORE_ANNOTATION = "restore"
 	// the name of the sidecar container
 	SIDECARCONTAINER_NAME string = "formol"
 	// Used by both the backupsession and restoresession controllers to identified the target deployment
