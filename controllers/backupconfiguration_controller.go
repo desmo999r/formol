@@ -58,6 +58,7 @@ type BackupConfigurationReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=cronjobs/status,verbs=get
 
 func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	var changed bool
 	ctx := context.Background()
 	log := r.Log.WithValues("backupconfiguration", req.NamespacedName)
 	//time.Sleep(300 * time.Millisecond)
@@ -110,13 +111,12 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			Name:      "backup-" + backupConf.Name,
 		}, cronjob); err == nil {
 			log.V(0).Info("there is already a cronjob")
-			var changed bool
 			if backupConf.Spec.Schedule != cronjob.Spec.Schedule {
 				log.V(0).Info("cronjob schedule has changed", "old schedule", cronjob.Spec.Schedule, "new schedule", backupConf.Spec.Schedule)
 				cronjob.Spec.Schedule = backupConf.Spec.Schedule
 				changed = true
 			}
-			if backupConf.Spec.Suspend != cronjob.Spec.Suspend {
+			if backupConf.Spec.Suspend != nil && backupConf.Spec.Suspend != cronjob.Spec.Suspend {
 				log.V(0).Info("cronjob suspend has changed", "before", cronjob.Spec.Suspend, "new", backupConf.Spec.Suspend)
 				cronjob.Spec.Suspend = backupConf.Spec.Suspend
 				changed = true
@@ -175,8 +175,10 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		if err := r.Create(context.Background(), cronjob); err != nil {
 			log.Error(err, "unable to create the cronjob", "cronjob", cronjob)
 			return err
+		} else {
+			changed = true
+			return nil
 		}
-		return nil
 	}
 
 	deleteSidecarContainer := func(target formolv1alpha1.Target) error {
@@ -278,8 +280,10 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		if err := r.Update(context.Background(), deployment); err != nil {
 			log.Error(err, "unable to update the Deployment")
 			return err
+		} else {
+			changed = true
+			return nil
 		}
-		return nil
 	}
 
 	deleteExternalResources := func() error {
@@ -300,17 +304,18 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		log.V(0).Info("backupconf being deleted", "backupconf", backupConf.Name)
 		if formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
 			_ = deleteExternalResources()
-		}
-		backupConf.ObjectMeta.Finalizers = formolutils.RemoveString(backupConf.ObjectMeta.Finalizers, finalizerName)
-		if err := r.Update(context.Background(), backupConf); err != nil {
-			log.Error(err, "unable to remove finalizer")
-			return ctrl.Result{}, err
+			backupConf.ObjectMeta.Finalizers = formolutils.RemoveString(backupConf.ObjectMeta.Finalizers, finalizerName)
+			if err := r.Update(context.Background(), backupConf); err != nil {
+				log.Error(err, "unable to remove finalizer")
+				return ctrl.Result{}, err
+			}
 		}
 		// We have been deleted. Return here
 		log.V(0).Info("backupconf deleted", "backupconf", backupConf.Name)
 		return ctrl.Result{}, nil
 	}
 
+	// Add finalizer
 	if !formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
 		backupConf.ObjectMeta.Finalizers = append(backupConf.ObjectMeta.Finalizers, finalizerName)
 		err := r.Update(context.Background(), backupConf)
@@ -322,24 +327,28 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 
 	if err := addCronJob(); err != nil {
 		return ctrl.Result{}, nil
+	} else {
+		backupConf.Status.ActiveCronJob = true
 	}
-	backupConf.Status.ActiveCronJob = true
 
 	for _, target := range backupConf.Spec.Targets {
 		switch target.Kind {
 		case formolv1alpha1.SidecarKind:
 			if err := addSidecarContainer(target); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
+			} else {
+				backupConf.Status.ActiveSidecar = true
 			}
-			backupConf.Status.ActiveSidecar = true
 		}
 	}
 
-	backupConf.Status.Suspended = false
-	log.V(1).Info("updating backupconf")
-	if err := r.Status().Update(ctx, backupConf); err != nil {
-		log.Error(err, "unable to update backupconf", "backupconf", backupConf)
-		return ctrl.Result{}, err
+	//backupConf.Status.Suspended = false
+	if changed == true {
+		log.V(1).Info("updating backupconf")
+		if err := r.Status().Update(ctx, backupConf); err != nil {
+			log.Error(err, "unable to update backupconf", "backupconf", backupConf)
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
