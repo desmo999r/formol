@@ -20,6 +20,7 @@ PROJECT
 bin/
 config/*
 !config/crd
+!config/default
 config/crd/bases
 !config/samples
 test/restic
