@@ -84,16 +84,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "BackupSession")
 		os.Exit(1)
 	}
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err = (&formolv1alpha1.BackupSession{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "BackupSession")
-			os.Exit(1)
-		}
-		if err = (&formolv1alpha1.BackupConfiguration{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "BackupConfiguration")
-			os.Exit(1)
-		}
-	}
 	if err = (&controllers.RestoreSessionReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("RestoreSession"),
@@ -102,10 +92,20 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "RestoreSession")
 		os.Exit(1)
 	}
-	if err = (&formoldesmojimfrv1alpha1.Function{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "Function")
-		os.Exit(1)
-	}
+	//	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	//		if err = (&formolv1alpha1.BackupSession{}).SetupWebhookWithManager(mgr); err != nil {
+	//			setupLog.Error(err, "unable to create webhook", "webhook", "BackupSession")
+	//			os.Exit(1)
+	//		}
+	//		if err = (&formolv1alpha1.BackupConfiguration{}).SetupWebhookWithManager(mgr); err != nil {
+	//			setupLog.Error(err, "unable to create webhook", "webhook", "BackupConfiguration")
+	//			os.Exit(1)
+	//		}
+	//		if err = (&formoldesmojimfrv1alpha1.Function{}).SetupWebhookWithManager(mgr); err != nil {
+	//			setupLog.Error(err, "unable to create webhook", "webhook", "Function")
+	//			os.Exit(1)
+	//		}
+	//	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

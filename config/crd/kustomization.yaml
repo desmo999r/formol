@@ -14,7 +14,7 @@ patchesStrategicMerge:
 # patches here are for enabling the conversion webhook for each CRD
 #- patches/webhook_in_tasks.yaml
 #- patches/webhook_in_functions.yaml
-- patches/webhook_in_backupconfigurations.yaml
+#- patches/webhook_in_backupconfigurations.yaml
 #- patches/webhook_in_backupsessions.yaml
 #- patches/webhook_in_repoes.yaml
 #- patches/webhook_in_restoresessions.yaml
