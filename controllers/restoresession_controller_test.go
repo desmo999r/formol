@@ -5,6 +5,7 @@ import (
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -28,7 +29,11 @@ var _ = Describe("Testing RestoreSession controller", func() {
 				Namespace: TestNamespace,
 			},
 			Spec: formolv1alpha1.RestoreSessionSpec{
-				Ref: TestBackupSessionName,
+				BackupSessionRef: formolv1alpha1.BackupSessionRef{
+					Ref: corev1.ObjectReference{
+						Name: TestBackupSessionName,
+					},
+				},
 			},
 		}
 	})

@@ -218,7 +218,10 @@ var (
 			Namespace: TestNamespace,
 		},
 		Spec: formolv1alpha1.BackupSessionSpec{
-			Ref: TestBackupConfName,
+			Ref: corev1.ObjectReference{
+				Name:      TestBackupConfName,
+				Namespace: TestNamespace,
+			},
 		},
 	}
 )

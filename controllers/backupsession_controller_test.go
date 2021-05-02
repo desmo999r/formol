@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	//corev1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -29,7 +30,9 @@ var _ = Describe("Testing BackupSession controller", func() {
 				Namespace: TestNamespace,
 			},
 			Spec: formolv1alpha1.BackupSessionSpec{
-				Ref: TestBackupConfName,
+				Ref: corev1.ObjectReference{
+					Name: TestBackupConfName,
+				},
 			},
 		}
 	})

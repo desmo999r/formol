@@ -76,9 +76,37 @@ spec:
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: Function
 metadata:
+  name: restore-pg
+  namespace: demo
+spec:
+  name: restore-pg
+  image: desmo999r/formolcli:latest
+  args: ["postgres", "restore", "--hostname", $(PGHOST), "--database", $(PGDATABASE), "--username", $(PGUSER), "--password", $(PGPASSWD), "--file", "/output/backup-pg.sql"]
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
   name: backup-pg
   namespace: demo
 spec:
   name: backup-pg
   image: desmo999r/formolcli:latest
   args: ["postgres", "backup", "--hostname", $(PGHOST), "--database", $(PGDATABASE), "--username", $(PGUSER), "--password", $(PGPASSWD), "--file", "/output/backup-pg.sql"]
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: maintenance-off
+  namespace: demo
+spec:
+  name: maintenance-off
+  command: ["/bin/bash", "-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-off >> /data/logs.txt"]
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: maintenance-on
+  namespace: demo
+spec:
+  name: maintenance-on
+  command: ["/bin/bash", "-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-on >> /data/logs.txt"]

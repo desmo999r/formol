@@ -10,6 +10,7 @@ const (
 	New      SessionState = "New"
 	Init     SessionState = "Initializing"
 	Running  SessionState = "Running"
+	Waiting  SessionState = "Waiting"
 	Finalize SessionState = "Finalizing"
 	Success  SessionState = "Success"
 	Failure  SessionState = "Failure"

@@ -67,7 +67,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	backupConf := &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: backupSession.Namespace,
-		Name:      backupSession.Spec.Ref,
+		Name:      backupSession.Spec.Ref.Name,
 	}, backupConf); err != nil {
 		log.Error(err, "unable to get backupConfiguration")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -281,7 +281,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		monthlyBackups.Counter = backupConf.Spec.Keep.Monthly
 		yearlyBackups.Counter = backupConf.Spec.Keep.Yearly
 		for _, session := range backupSessionList.Items {
-			if session.Spec.Ref != backupConf.Name {
+			if session.Spec.Ref.Name != backupConf.Name {
 				continue
 			}
 			deleteSession := true

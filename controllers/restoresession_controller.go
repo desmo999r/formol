@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -60,20 +61,31 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		log.Error(err, "unable to get restoresession")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	log.V(1).Info("got restoresession", "restoreSession", restoreSession)
 	// Get the BackupSession the RestoreSession references
 	backupSession := &formolv1alpha1.BackupSession{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: restoreSession.Namespace,
-		Name:      restoreSession.Spec.Ref}, backupSession); err != nil {
-		log.Error(err, "unable to get backupsession", "restoresession", restoreSession.Spec)
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		Name:      restoreSession.Spec.BackupSessionRef.Ref.Name,
+	}, backupSession); err != nil {
+		if errors.IsNotFound(err) {
+			backupSession = &formolv1alpha1.BackupSession{
+				Spec:   restoreSession.Spec.BackupSessionRef.Spec,
+				Status: restoreSession.Spec.BackupSessionRef.Status,
+			}
+			log.V(1).Info("generated backupsession", "backupsession", backupSession)
+		} else {
+			log.Error(err, "unable to get backupsession", "restoresession", restoreSession.Spec)
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 	}
 	// Get the BackupConfiguration linked to the BackupSession
 	backupConf := &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{
-		Namespace: backupSession.Namespace,
-		Name:      backupSession.Spec.Ref}, backupConf); err != nil {
-		log.Error(err, "unable to get backupConfiguration")
+		Namespace: backupSession.Spec.Ref.Namespace,
+		Name:      backupSession.Spec.Ref.Name,
+	}, backupConf); err != nil {
+		log.Error(err, "unable to get backupConfiguration", "name", backupSession.Spec.Ref, "namespace", backupSession.Namespace)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -229,50 +241,50 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				return nil
 			}
 		}
-		var snapshotId string
 		for _, targetStatus := range backupSession.Status.Targets {
 			if targetStatus.Name == target.Name && targetStatus.Kind == target.Kind {
-				snapshotId = targetStatus.SnapshotId
+				snapshotId := targetStatus.SnapshotId
+				restoreSessionEnv := []corev1.EnvVar{
+					corev1.EnvVar{
+						Name:  formolv1alpha1.TARGET_NAME,
+						Value: target.Name,
+					},
+					corev1.EnvVar{
+						Name:  formolv1alpha1.RESTORESESSION_NAME,
+						Value: restoreSession.Name,
+					},
+					corev1.EnvVar{
+						Name:  formolv1alpha1.RESTORESESSION_NAMESPACE,
+						Value: restoreSession.Namespace,
+					},
+				}
+				initContainer := corev1.Container{
+					Name:         RESTORESESSION,
+					Image:        formolutils.FORMOLCLI,
+					Args:         []string{"volume", "restore", "--snapshot-id", snapshotId},
+					VolumeMounts: target.VolumeMounts,
+					Env:          restoreSessionEnv,
+				}
+				repo := &formolv1alpha1.Repo{}
+				if err := r.Get(ctx, client.ObjectKey{
+					Namespace: backupConf.Namespace,
+					Name:      backupConf.Spec.Repository,
+				}, repo); err != nil {
+					log.Error(err, "unable to get Repo from BackupConfiguration")
+					return err
+				}
+				// S3 backing storage
+				initContainer.Env = append(initContainer.Env, formolutils.ConfigureResticEnvVar(backupConf, repo)...)
+				deployment.Spec.Template.Spec.InitContainers = append([]corev1.Container{initContainer},
+					deployment.Spec.Template.Spec.InitContainers...)
+				if err := r.Update(ctx, deployment); err != nil {
+					log.Error(err, "unable to update deployment")
+					return err
+				}
+
+				return nil
 			}
 		}
-		restoreSessionEnv := []corev1.EnvVar{
-			corev1.EnvVar{
-				Name:  formolv1alpha1.TARGET_NAME,
-				Value: target.Name,
-			},
-			corev1.EnvVar{
-				Name:  formolv1alpha1.RESTORESESSION_NAME,
-				Value: restoreSession.Name,
-			},
-			corev1.EnvVar{
-				Name:  formolv1alpha1.RESTORESESSION_NAMESPACE,
-				Value: restoreSession.Namespace,
-			},
-		}
-		initContainer := corev1.Container{
-			Name:         RESTORESESSION,
-			Image:        formolutils.FORMOLCLI,
-			Args:         []string{"volume", "restore", "--snapshot-id", snapshotId},
-			VolumeMounts: target.VolumeMounts,
-			Env:          restoreSessionEnv,
-		}
-		repo := &formolv1alpha1.Repo{}
-		if err := r.Get(ctx, client.ObjectKey{
-			Namespace: backupConf.Namespace,
-			Name:      backupConf.Spec.Repository,
-		}, repo); err != nil {
-			log.Error(err, "unable to get Repo from BackupConfiguration")
-			return err
-		}
-		// S3 backing storage
-		initContainer.Env = append(initContainer.Env, formolutils.ConfigureResticEnvVar(backupConf, repo)...)
-		deployment.Spec.Template.Spec.InitContainers = append([]corev1.Container{initContainer},
-			deployment.Spec.Template.Spec.InitContainers...)
-		if err := r.Update(ctx, deployment); err != nil {
-			log.Error(err, "unable to update deployment")
-			return err
-		}
-
 		return nil
 	}
 
@@ -333,7 +345,7 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			}
 		}
 	case formolv1alpha1.Running:
-		currentTargetStatus := restoreSession.Status.Targets[len(restoreSession.Status.Targets)-1]
+		currentTargetStatus := &restoreSession.Status.Targets[len(restoreSession.Status.Targets)-1]
 		switch currentTargetStatus.SessionState {
 		case formolv1alpha1.Failure:
 			log.V(0).Info("last restore task failed. Stop here", "target", currentTargetStatus.Name)
@@ -345,6 +357,32 @@ func (r *RestoreSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		case formolv1alpha1.Running:
 			log.V(0).Info("task is still running", "target", currentTargetStatus.Name)
 			return ctrl.Result{}, nil
+		case formolv1alpha1.Waiting:
+			target := backupConf.Spec.Targets[len(restoreSession.Status.Targets)-1]
+			if target.Kind == formolv1alpha1.SidecarKind {
+				deployment := &appsv1.Deployment{}
+				if err := r.Get(context.Background(), client.ObjectKey{
+					Namespace: restoreSession.Namespace,
+					Name:      target.Name,
+				}, deployment); err != nil {
+					log.Error(err, "unable to get deployment")
+					return ctrl.Result{}, err
+				}
+
+				if deployment.Status.ReadyReplicas == *deployment.Spec.Replicas {
+					log.V(0).Info("The deployment is ready. We can resume the backup")
+					currentTargetStatus.SessionState = formolv1alpha1.Finalize
+					if err := r.Status().Update(ctx, restoreSession); err != nil {
+						log.Error(err, "unable to update restoresession")
+						return ctrl.Result{}, err
+					}
+				} else {
+					log.V(0).Info("Waiting for the sidecar to come back")
+					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+			} else {
+				log.V(0).Info("not a SidecarKind. Ignoring Waiting")
+			}
 		case formolv1alpha1.Success:
 			_ = endTask()
 			log.V(0).Info("last task was a success. start a new one", "target", currentTargetStatus)

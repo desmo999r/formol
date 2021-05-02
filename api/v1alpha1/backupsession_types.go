@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,7 +26,7 @@ import (
 
 // BackupSessionSpec defines the desired state of BackupSession
 type BackupSessionSpec struct {
-	Ref string `json:"ref"`
+	Ref corev1.ObjectReference `json:"ref"`
 }
 
 // BackupSessionStatus defines the observed state of BackupSession
@@ -45,7 +46,7 @@ type BackupSessionStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName="bs"
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Ref",type=string,JSONPath=`.spec.ref`
+// +kubebuilder:printcolumn:name="Ref",type=string,JSONPath=`.spec.ref.name`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="Started",type=string,format=date-time,JSONPath=`.status.startTime`
 // +kubebuilder:printcolumn:name="Keep",type=string,JSONPath=`.status.keep`

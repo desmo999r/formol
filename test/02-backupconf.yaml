@@ -11,6 +11,10 @@ spec:
   - kind: Sidecar
     apiVersion: v1
     name: nginx-deployment
+    steps:
+      - name: maintenance-on
+      - name: maintenance-off
+        finalize: true
     volumeMounts:
       - name: demo-data
         mountPath: /data
