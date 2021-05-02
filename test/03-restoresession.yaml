@@ -1,0 +1,11 @@
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: RestoreSession
+metadata:
+  namespace: demo
+  name: restore-demo
+spec:
+  backupSession: 
+    ref:
+      name: backupsession-backup-demo-1619904678
+      namespace: demo
+
