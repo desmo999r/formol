@@ -220,9 +220,9 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 		return nil
 	}
 
-	deleteRestoreInitContainer := func(target formolv1alpha1.Target) error {
+	deleteRestoreInitContainer := func(target formolv1alpha1.Target) (err error) {
 		deployment := &appsv1.Deployment{}
-		if err := r.Get(context.Background(), client.ObjectKey{
+		if err = r.Get(context.Background(), client.ObjectKey{
 			Namespace: backupConf.Namespace,
 			Name:      target.Name,
 		}, deployment); err != nil {
@@ -234,15 +234,16 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 		for _, initContainer := range deployment.Spec.Template.Spec.InitContainers {
 			if initContainer.Name == RESTORESESSION {
 				log.V(0).Info("Found our restoresession container. Removing it from the list of init containers", "container", initContainer)
+				defer func() {
+					if err = r.Update(ctx, deployment); err != nil {
+						log.Error(err, "unable to update deployment")
+					}
+				}()
 			} else {
 				newInitContainers = append(newInitContainers, initContainer)
 			}
 		}
 		deployment.Spec.Template.Spec.InitContainers = newInitContainers
-		if err := r.Update(ctx, deployment); err != nil {
-			log.Error(err, "unable to update deployment")
-			return err
-		}
 		return nil
 	}
 
