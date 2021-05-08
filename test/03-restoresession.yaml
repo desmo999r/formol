@@ -5,7 +5,26 @@ metadata:
   name: restore-demo
 spec:
   backupSession: 
-    ref:
-      name: backupsession-backup-demo-1619904678
-      namespace: demo
-
+    spec:
+      ref:
+        name: backup-demo
+        namespace: demo
+    status:
+      keep: monthly
+      startTime: "2021-05-01T22:15:28Z"
+      state: Success
+      target:
+      - duration: 17.952754232s
+        kind: Sidecar
+        name: nginx-deployment
+        snapshotId: f411315c
+        startTime: "2021-05-01T22:15:34Z"
+        state: Success
+        try: 1
+      - duration: 25.46747271s
+        kind: Job
+        name: backup-pg
+        snapshotId: ca673e5a
+        startTime: "2021-05-01T22:15:55Z"
+        state: Success
+        try: 1
