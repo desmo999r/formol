@@ -32,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 	formolutils "github.com/desmo999r/formol/pkg/utils"
@@ -50,19 +51,20 @@ type BackupSessionReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+var _ reconcile.Reconciler = &BackupSessionReconciler{}
+
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions/status,verbs=get;update;patch;create;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=functions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
 
-func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := r.Log.WithValues("backupsession", req.NamespacedName)
-	ctx := context.Background()
 
 	backupSession := &formolv1alpha1.BackupSession{}
 	if err := r.Get(ctx, req.NamespacedName, backupSession); err != nil {
 		log.Error(err, "unable to get backupsession")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 	backupConf := &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{
@@ -70,7 +72,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		Name:      backupSession.Spec.Ref.Name,
 	}, backupConf); err != nil {
 		log.Error(err, "unable to get backupConfiguration")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// helper functions
@@ -358,23 +360,23 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				if err != nil {
 					log.Error(err, "unable to add finalizer")
 				}
-				return ctrl.Result{}, err
+				return reconcile.Result{}, err
 			}
 			// Brand new backupsession
 			if isBackupOngoing() {
 				log.V(0).Info("There is an ongoing backup. Let's reschedule this operation")
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+				return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 			}
 			// start the first task
 			backupSession.Status.SessionState = formolv1alpha1.Running
 			targetStatus, err := startNextTask()
 			if err != nil {
-				return ctrl.Result{}, err
+				return reconcile.Result{}, err
 			}
 			log.V(0).Info("New backup. Start the first task", "task", targetStatus)
 			if err := r.Status().Update(ctx, backupSession); err != nil {
 				log.Error(err, "unable to update BackupSession status")
-				return ctrl.Result{}, err
+				return reconcile.Result{}, err
 			}
 		case formolv1alpha1.Running:
 			// Backup ongoing. Check the status of the last task to decide what to do
@@ -388,7 +390,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				targetStatus, err := startNextTask()
 				log.V(0).Info("last task was a success. start a new one", "currentTargetStatus", currentTargetStatus, "targetStatus", targetStatus)
 				if err != nil {
-					return ctrl.Result{}, err
+					return reconcile.Result{}, err
 				}
 				if targetStatus == nil {
 					// No more task to start. The backup is a success
@@ -398,7 +400,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				}
 				if err := r.Status().Update(ctx, backupSession); err != nil {
 					log.Error(err, "unable to update BackupSession status")
-					return ctrl.Result{}, err
+					return reconcile.Result{}, err
 				}
 			case formolv1alpha1.Failure:
 				// last task failed. Try to run it again
@@ -413,7 +415,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 						if err := createBackupJob(currentTarget); err != nil {
 							log.V(0).Info("unable to create task", "task", currentTarget)
 							currentTargetStatus.SessionState = formolv1alpha1.Failure
-							return ctrl.Result{}, err
+							return reconcile.Result{}, err
 						}
 					}
 				} else {
@@ -422,7 +424,7 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				}
 				if err := r.Status().Update(ctx, backupSession); err != nil {
 					log.Error(err, "unable to update BackupSession status")
-					return ctrl.Result{}, err
+					return reconcile.Result{}, err
 				}
 			}
 		case formolv1alpha1.Success:
@@ -435,29 +437,29 @@ func (r *BackupSessionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			backupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
 			if err := r.Status().Update(ctx, backupSession); err != nil {
 				log.Error(err, "unable to update backupSession")
-				return ctrl.Result{}, err
+				return reconcile.Result{}, err
 			}
 		}
 	} else {
 		log.V(0).Info("backupsession being deleted", "backupsession", backupSession.Name)
 		if controllerutil.ContainsFinalizer(backupSession, finalizerName) {
 			if err := deleteExternalResources(); err != nil {
-				return ctrl.Result{}, err
+				return reconcile.Result{}, err
 			}
 		}
 		controllerutil.RemoveFinalizer(backupSession, finalizerName)
 		if err := r.Update(ctx, backupSession); err != nil {
 			log.Error(err, "unable to remove finalizer")
-			return ctrl.Result{}, err
+			return reconcile.Result{}, err
 		}
 		// We have been deleted. Return here
-		return ctrl.Result{}, nil
+		return reconcile.Result{}, nil
 	}
-	return ctrl.Result{}, nil
+	return reconcile.Result{}, nil
 }
 
 func (r *BackupSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &formolv1alpha1.BackupSession{}, sessionState, func(rawObj runtime.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &formolv1alpha1.BackupSession{}, sessionState, func(rawObj client.Object) []string {
 		session := rawObj.(*formolv1alpha1.BackupSession)
 		return []string{string(session.Status.SessionState)}
 	}); err != nil {

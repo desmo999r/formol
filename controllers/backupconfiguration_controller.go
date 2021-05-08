@@ -33,7 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	//"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 )
@@ -44,6 +44,8 @@ type BackupConfigurationReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
+
+var _ reconcile.Reconciler = &BackupConfigurationReconciler{}
 
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=*,verbs=*
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -57,9 +59,8 @@ type BackupConfigurationReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=cronjobs/status,verbs=get
 
-func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	var changed bool
-	ctx := context.Background()
 	log := r.Log.WithValues("backupconfiguration", req.NamespacedName)
 	//time.Sleep(300 * time.Millisecond)
 
@@ -67,7 +68,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 
 	backupConf := &formolv1alpha1.BackupConfiguration{}
 	if err := r.Get(ctx, req.NamespacedName, backupConf); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 
 	getDeployment := func(namespace string, name string) (*appsv1.Deployment, error) {
@@ -307,12 +308,12 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			backupConf.ObjectMeta.Finalizers = formolutils.RemoveString(backupConf.ObjectMeta.Finalizers, finalizerName)
 			if err := r.Update(context.Background(), backupConf); err != nil {
 				log.Error(err, "unable to remove finalizer")
-				return ctrl.Result{}, err
+				return reconcile.Result{}, err
 			}
 		}
 		// We have been deleted. Return here
 		log.V(0).Info("backupconf deleted", "backupconf", backupConf.Name)
-		return ctrl.Result{}, nil
+		return reconcile.Result{}, nil
 	}
 
 	// Add finalizer
@@ -322,11 +323,11 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		if err != nil {
 			log.Error(err, "unable to append finalizer")
 		}
-		return ctrl.Result{}, err
+		return reconcile.Result{}, err
 	}
 
 	if err := addCronJob(); err != nil {
-		return ctrl.Result{}, nil
+		return reconcile.Result{}, nil
 	} else {
 		backupConf.Status.ActiveCronJob = true
 	}
@@ -335,7 +336,7 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		switch target.Kind {
 		case formolv1alpha1.SidecarKind:
 			if err := addSidecarContainer(target); err != nil {
-				return ctrl.Result{}, client.IgnoreNotFound(err)
+				return reconcile.Result{}, client.IgnoreNotFound(err)
 			} else {
 				backupConf.Status.ActiveSidecar = true
 			}
@@ -347,11 +348,11 @@ func (r *BackupConfigurationReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		log.V(1).Info("updating backupconf")
 		if err := r.Status().Update(ctx, backupConf); err != nil {
 			log.Error(err, "unable to update backupconf", "backupconf", backupConf)
-			return ctrl.Result{}, err
+			return reconcile.Result{}, err
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return reconcile.Result{}, nil
 }
 
 func (r *BackupConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
