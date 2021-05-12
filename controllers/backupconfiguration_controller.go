@@ -58,6 +58,7 @@ var _ reconcile.Reconciler = &BackupConfigurationReconciler{}
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=cronjobs/status,verbs=get
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
 func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	var changed bool
@@ -151,7 +152,7 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req recon
 								Containers: []corev1.Container{
 									corev1.Container{
 										Name:  "job-createbackupsession-" + backupConf.Name,
-										Image: "desmo999r/formolcli:latest",
+										Image: backupConf.Spec.Image,
 										Args: []string{
 											"backupsession",
 											"create",
@@ -220,7 +221,7 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req recon
 		sidecar := corev1.Container{
 			Name: formolv1alpha1.SIDECARCONTAINER_NAME,
 			// TODO: Put the image in the BackupConfiguration YAML file
-			Image: "desmo999r/formolcli:latest",
+			Image: backupConf.Spec.Image,
 			Args:  []string{"backupsession", "server"},
 			//Image: "busybox",
 			//Command: []string{

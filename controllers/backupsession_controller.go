@@ -57,6 +57,7 @@ var _ reconcile.Reconciler = &BackupSessionReconciler{}
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions/status,verbs=get;update;patch;create;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=functions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
 func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := r.Log.WithValues("backupsession", req.NamespacedName)
@@ -105,7 +106,7 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.R
 			if target.SessionState == formolv1alpha1.Success {
 				deleteSnapshots = append(deleteSnapshots, corev1.Container{
 					Name:  target.Name,
-					Image: "desmo999r/formolcli:latest",
+					Image: backupConf.Spec.Image,
 					Args:  []string{"snapshot", "delete", "--snapshot-id", target.SnapshotId},
 					Env:   env,
 				})
@@ -164,7 +165,7 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.R
 		}
 		restic := corev1.Container{
 			Name:         "restic",
-			Image:        "desmo999r/formolcli:latest",
+			Image:        backupConf.Spec.Image,
 			Args:         []string{"volume", "backup", "--tag", backupSession.Name, "--path", "/output"},
 			VolumeMounts: []corev1.VolumeMount{output},
 			Env:          backupSessionEnv,

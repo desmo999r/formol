@@ -168,6 +168,7 @@ var (
 		},
 		Spec: formolv1alpha1.BackupConfigurationSpec{
 			Repository: TestRepoName,
+			Image:      "desmo999r/formolcli:latest",
 			Schedule:   "1 * * * *",
 			Keep: formolv1alpha1.Keep{
 				Last: 2,

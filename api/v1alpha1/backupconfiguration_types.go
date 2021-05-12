@@ -69,6 +69,7 @@ type Keep struct {
 // BackupConfigurationSpec defines the desired state of BackupConfiguration
 type BackupConfigurationSpec struct {
 	Repository string `json:"repository"`
+	Image      string `json:"image"`
 
 	// +optional
 	Suspend *bool `json:"suspend,omitempty"`

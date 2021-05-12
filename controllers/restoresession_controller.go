@@ -55,6 +55,7 @@ var _ reconcile.Reconciler = &RestoreSessionReconciler{}
 
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=restoresessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=formol.desmojim.fr,resources=restoresessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
 func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := log.FromContext(ctx).WithValues("restoresession", req.NamespacedName)
@@ -127,19 +128,16 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 			Name:      "output",
 			MountPath: "/output",
 		}
-		//for _, targetStatus := range backupSession.Status.Targets {
-		//if targetStatus.Name == target.Name {
-		//snapshotId := targetStatus.SnapshotId
 		restic := corev1.Container{
 			Name:         "restic",
-			Image:        "desmo999r/formolcli:latest",
+			Image:        backupConf.Spec.Image,
 			Args:         []string{"volume", "restore", "--snapshot-id", snapshotId},
 			VolumeMounts: []corev1.VolumeMount{output},
 			Env:          restoreSessionEnv,
 		}
 		finalizer := corev1.Container{
 			Name:         "finalizer",
-			Image:        "desmo999r/formolcli:latest",
+			Image:        backupConf.Spec.Image,
 			Args:         []string{"target", "finalize"},
 			VolumeMounts: []corev1.VolumeMount{output},
 			Env:          restoreSessionEnv,
@@ -214,8 +212,6 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 		if err := r.Create(ctx, job); err != nil {
 			log.Error(err, "unable to create job", "job", job)
 			return err
-			//}
-			//}
 		}
 		return nil
 	}
@@ -263,9 +259,6 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 				return nil
 			}
 		}
-		//for _, targetStatus := range backupSession.Status.Targets {
-		//if targetStatus.Name == target.Name && targetStatus.Kind == target.Kind {
-		//snapshotId := targetStatus.SnapshotId
 		restoreSessionEnv := []corev1.EnvVar{
 			corev1.EnvVar{
 				Name:  formolv1alpha1.TARGET_NAME,
@@ -282,7 +275,7 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 		}
 		initContainer := corev1.Container{
 			Name:         RESTORESESSION,
-			Image:        formolutils.FORMOLCLI,
+			Image:        backupConf.Spec.Image,
 			Args:         []string{"volume", "restore", "--snapshot-id", snapshotId},
 			VolumeMounts: target.VolumeMounts,
 			Env:          restoreSessionEnv,
@@ -305,9 +298,6 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 		}
 
 		return nil
-		//}
-		//}
-		//return nil
 	}
 
 	startNextTask := func() (*formolv1alpha1.TargetStatus, error) {

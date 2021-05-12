@@ -41,6 +41,7 @@ var _ = Describe("Testing BackupConf controller", func() {
 			Spec: formolv1alpha1.BackupConfigurationSpec{
 				Repository: TestRepoName,
 				Schedule:   "1 * * * *",
+				Image:      "desmo999r/formolcli:latest",
 				Targets: []formolv1alpha1.Target{
 					formolv1alpha1.Target{
 						Kind: formolv1alpha1.SidecarKind,
