@@ -44,6 +44,8 @@ type Target struct {
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 	// +optional
+	ContainerName string `json:"containerName"`
+	// +optional
 	ApiVersion string `json:"apiVersion,omitempty"`
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
