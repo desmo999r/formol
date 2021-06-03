@@ -30,8 +30,6 @@ const (
 type Step struct {
 	Name string `json:"name"`
 	// +optional
-	Env []corev1.EnvVar `json:"env,omitempty"`
-	// +optional
 	Finalize *bool `json:"finalize,omitempty"`
 }
 

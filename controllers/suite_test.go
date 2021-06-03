@@ -159,6 +159,12 @@ var (
 			Name:  "backup-func",
 			Image: "myimage",
 			Args:  []string{"a", "set", "of", "args"},
+			Env: []corev1.EnvVar{
+				corev1.EnvVar{
+					Name:  "foo",
+					Value: "bar",
+				},
+			},
 		},
 	}
 	testBackupConf = &formolv1alpha1.BackupConfiguration{
@@ -201,12 +207,6 @@ var (
 						},
 						formolv1alpha1.Step{
 							Name: TestBackupFuncName,
-							Env: []corev1.EnvVar{
-								corev1.EnvVar{
-									Name:  "foo",
-									Value: "bar",
-								},
-							},
 						},
 					},
 				},

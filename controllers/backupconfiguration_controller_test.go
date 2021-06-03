@@ -62,12 +62,6 @@ var _ = Describe("Testing BackupConf controller", func() {
 						Steps: []formolv1alpha1.Step{
 							formolv1alpha1.Step{
 								Name: TestBackupFuncName,
-								Env: []corev1.EnvVar{
-									corev1.EnvVar{
-										Name:  "foo",
-										Value: "bar",
-									},
-								},
 							},
 						},
 					},

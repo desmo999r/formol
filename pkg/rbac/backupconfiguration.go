@@ -217,7 +217,7 @@ func CreateFormolRBAC(cl client.Client, saName string, namespace string) error {
 			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch"},
 				APIGroups: []string{""},
-				Resources: []string{"pods"},
+				Resources: []string{"pods", "secrets", "configmaps"},
 			},
 			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch"},
@@ -281,7 +281,7 @@ func CreateBackupSessionListenerRBAC(cl client.Client, saName string, namespace 
 			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch"},
 				APIGroups: []string{""},
-				Resources: []string{"pods"},
+				Resources: []string{"pods", "secrets", "configmaps"},
 			},
 			rbacv1.PolicyRule{
 				Verbs:     []string{"get", "list", "watch"},

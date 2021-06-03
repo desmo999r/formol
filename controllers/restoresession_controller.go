@@ -200,7 +200,7 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 				return err
 			}
 			function.Spec.Name = function.Name
-			function.Spec.Env = append(step.Env, restoreSessionEnv...)
+			function.Spec.Env = append(function.Spec.Env, restoreSessionEnv...)
 			function.Spec.VolumeMounts = append(function.Spec.VolumeMounts, output)
 			job.Spec.Template.Spec.InitContainers = append(job.Spec.Template.Spec.InitContainers, function.Spec)
 		}

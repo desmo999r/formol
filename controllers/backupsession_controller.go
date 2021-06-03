@@ -212,7 +212,7 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.R
 				return err
 			}
 			function.Spec.Name = function.Name
-			function.Spec.Env = append(step.Env, backupSessionEnv...)
+			function.Spec.Env = append(function.Spec.Env, backupSessionEnv...)
 			function.Spec.VolumeMounts = append(function.Spec.VolumeMounts, output)
 			job.Spec.Template.Spec.InitContainers = append(job.Spec.Template.Spec.InitContainers, function.Spec)
 		}
