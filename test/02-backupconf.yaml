@@ -15,6 +15,8 @@ spec:
     name: nginx-deployment
     steps:
       - name: maintenance-on
+      - name: with-env
+      - name: with-envfrom
       - name: maintenance-off
         finalize: true
     volumeMounts:
@@ -22,19 +24,10 @@ spec:
         mountPath: /data
     paths:
       - /data
-  - kind: Job
-    name: backup-pg
-    steps:
-      - name: backup-pg
-        env:
-          - name: PGHOST
-            value: postgres
-          - name: PGDATABASE
-            value: demopostgres
-          - name: PGUSER
-            value: demopostgres
-          - name: PGPASSWD
-            value: password123!
+#  - kind: Job
+#    name: backup-pg
+#    steps:
+#      - name: backup-pg
   keep:
     last: 5
     daily: 2
