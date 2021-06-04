@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= desmo999r/formolcontroller:0.2.0
+IMG ?= desmo999r/formolcontroller:0.2.1
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 #CRD_OPTIONS ?= "crd:trivialVersions=true"
 CRD_OPTIONS ?= "crd:trivialVersions=true,crdVersions=v1"
@@ -58,6 +58,8 @@ vet:
 # Generate code
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+docker: docker-build docker-push
 
 # Build the docker image
 docker-build: test
