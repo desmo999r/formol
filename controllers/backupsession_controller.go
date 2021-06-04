@@ -124,8 +124,8 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.R
 					TTLSecondsAfterFinished: &jobTtl,
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							InitContainers: []corev1.Container{},
-							Containers:     deleteSnapshots,
+							InitContainers: deleteSnapshots[1:],
+							Containers:     []corev1.Container{deleteSnapshots[0]},
 							RestartPolicy:  corev1.RestartPolicyOnFailure,
 						},
 					},
@@ -212,7 +212,7 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.R
 				return err
 			}
 			function.Spec.Name = function.Name
-			function.Spec.Env = append(step.Env, backupSessionEnv...)
+			function.Spec.Env = append(function.Spec.Env, backupSessionEnv...)
 			function.Spec.VolumeMounts = append(function.Spec.VolumeMounts, output)
 			job.Spec.Template.Spec.InitContainers = append(job.Spec.Template.Spec.InitContainers, function.Spec)
 		}

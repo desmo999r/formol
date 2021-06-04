@@ -51,6 +51,8 @@ var _ reconcile.Reconciler = &BackupConfigurationReconciler{}
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=replicasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
@@ -212,10 +214,18 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req recon
 			return err
 		}
 		log.V(1).Info("got deployment", "Deployment", deployment)
-		for _, container := range deployment.Spec.Template.Spec.Containers {
+		for i, container := range deployment.Spec.Template.Spec.Containers {
 			if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
 				log.V(0).Info("There is already a backup sidecar container. Skipping", "container", container)
 				return nil
+			}
+			if target.ContainerName != "" && target.ContainerName == container.Name {
+				// Put a tag so we can find what container we are supposed to backup
+				// and what process we are supposed to chroot to run the init steps
+				deployment.Spec.Template.Spec.Containers[i].Env = append(container.Env, corev1.EnvVar{
+					Name:  formolv1alpha1.TARGETCONTAINER_TAG,
+					Value: "True",
+				})
 			}
 		}
 		sidecar := corev1.Container{
