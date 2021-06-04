@@ -124,8 +124,8 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req reconcile.R
 					TTLSecondsAfterFinished: &jobTtl,
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							InitContainers: []corev1.Container{},
-							Containers:     deleteSnapshots,
+							InitContainers: deleteSnapshots[1:],
+							Containers:     []corev1.Container{deleteSnapshots[0]},
 							RestartPolicy:  corev1.RestartPolicyOnFailure,
 						},
 					},
