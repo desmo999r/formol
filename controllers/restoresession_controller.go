@@ -313,12 +313,14 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req reconcile.
 			restoreSession.Status.Targets = append(restoreSession.Status.Targets, targetStatus)
 			switch target.Kind {
 			case formolv1alpha1.SidecarKind:
+				log.V(0).Info("Next task is a Sidecard restore", "target", target)
 				if err := createRestoreInitContainer(target, backupSession.Status.Targets[nextTarget].SnapshotId); err != nil {
 					log.V(0).Info("unable to create restore init container", "task", target)
 					targetStatus.SessionState = formolv1alpha1.Failure
 					return nil, err
 				}
 			case formolv1alpha1.JobKind:
+				log.V(0).Info("Next task is a Job restore", "target", target)
 				if err := createRestoreJob(target, backupSession.Status.Targets[nextTarget].SnapshotId); err != nil {
 					log.V(0).Info("unable to create restore job", "task", target)
 					targetStatus.SessionState = formolv1alpha1.Failure
