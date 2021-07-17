@@ -31,7 +31,7 @@ type Function struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec corev1.Container `json:"spec,omitempty"`
+	Spec corev1.Container `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
