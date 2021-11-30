@@ -96,6 +96,8 @@ type BackupConfigurationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName="bc"
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Suspended",type=boolean,JSONPath=`.spec.suspend`
+// +kubebuilder:printcolumn:name="Schedule",type=string,JSONPath=`.spec.schedule`
 type BackupConfiguration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
