@@ -25,3 +25,4 @@ config/crd/bases
 !config/samples
 test/restic
 test/password
+testbin/*
