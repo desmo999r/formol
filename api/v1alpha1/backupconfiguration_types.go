@@ -1,5 +1,5 @@
 /*
-
+Copyright 2023.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,87 +17,82 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:Enum=Deployment;StatefulSet;Pod
+type TargetKind string
+
 const (
-	SidecarKind   string = "Sidecar"
-	JobKind       string = "Job"
-	BackupVolumes string = "Volumes"
+	Deployment  TargetKind = "Deployment"
+	StatefulSet TargetKind = "StatefulSet"
+	Pod         TargetKind = "Pod"
+)
+
+// +kubebuilder:validation:Enum=Online;Snapshot;Job
+type BackupType string
+
+const (
+	SnapshotKind BackupType = "Snapshot"
+	OnlineKind   BackupType = "Online"
+	JobKind      BackupType = "Job"
 )
 
 type Step struct {
 	Name string `json:"name"`
 	// +optional
-	Finalize *bool `json:"finalize,omitempty"`
+	Finalize *bool `json:"finalize"`
 }
 
-type Hook struct {
-	Cmd string `json:"cmd"`
-	// +optional
-	Args []string `json:"args,omitempty"`
+type TargetContainer struct {
+	Name  string   `json:"name"`
+	Paths []string `json:"paths,omitempty"`
+	// +kubebuilder:default:=2
+	Retry int    `json:"retry"`
+	Steps []Step `json:"steps,omitempty"`
 }
 
 type Target struct {
-	// +kubebuilder:validation:Enum=Sidecar;Job
-	Kind string `json:"kind"`
-	Name string `json:"name"`
-	// +optional
-	ContainerName string `json:"containerName"`
-	// +optional
-	ApiVersion string `json:"apiVersion,omitempty"`
-	// +optional
-	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
-	// +optional
-	Paths []string `json:"paths,omitempty"`
-	// +optional
-	// +kubebuilder:validation:MinItems=1
-	Steps []Step `json:"steps,omitempty"`
-	// +kubebuilder:default:=2
-	Retry int `json:"retry,omitempty"`
+	BackupType `json:"backupType"`
+	TargetKind `json:"targetKind"`
+	TargetName string            `json:"targetName"`
+	Containers []TargetContainer `json:"containers"`
 }
 
 type Keep struct {
-	Last    int32 `json:"last,omitempty"`
-	Daily   int32 `json:"daily,omitempty"`
-	Weekly  int32 `json:"weekly,omitempty"`
-	Monthly int32 `json:"monthly,omitempty"`
-	Yearly  int32 `json:"yearly,omitempty"`
+	Last    int32 `json:"last"`
+	Daily   int32 `json:"daily"`
+	Weekly  int32 `json:"weekly"`
+	Monthly int32 `json:"monthly"`
+	Yearly  int32 `json:"yearly"`
 }
 
 // BackupConfigurationSpec defines the desired state of BackupConfiguration
 type BackupConfigurationSpec struct {
 	Repository string `json:"repository"`
 	Image      string `json:"image"`
-
-	// +optional
-	Suspend *bool `json:"suspend,omitempty"`
-
-	// +optional
-	Schedule string `json:"schedule,omitempty"`
-	// +kubebuilder:validation:MinItems=1
-	Targets []Target `json:"targets"`
-	// +optional
-	Keep `json:"keep,omitempty"`
+	// +kubebuilder:default:=false
+	Suspend  *bool  `json:"suspend"`
+	Schedule string `json:"schedule"`
+	Keep     `json:"keep"`
+	Targets  []Target `json:"targets"`
 }
 
 // BackupConfigurationStatus defines the observed state of BackupConfiguration
 type BackupConfigurationStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
 	Suspended      bool         `json:"suspended"`
 	ActiveCronJob  bool         `json:"activeCronJob"`
 	ActiveSidecar  bool         `json:"activeSidecar"`
 }
 
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:resource:shortName="bc"
+//+kubebuilder:printcolumn:name="Suspended",type=boolean,JSONPath=`.spec.suspend`
+//+kubebuilder:printcolumn:name="Schedule",type=string,JSONPath=`.spec.schedule`
+
 // BackupConfiguration is the Schema for the backupconfigurations API
-// +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName="bc"
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Suspended",type=boolean,JSONPath=`.spec.suspend`
-// +kubebuilder:printcolumn:name="Schedule",type=string,JSONPath=`.spec.schedule`
 type BackupConfiguration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -106,7 +101,7 @@ type BackupConfiguration struct {
 	Status BackupConfigurationStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
 // BackupConfigurationList contains a list of BackupConfiguration
 type BackupConfigurationList struct {

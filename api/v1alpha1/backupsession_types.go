@@ -1,5 +1,5 @@
 /*
-
+Copyright 2023.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type SessionState string
+
+const (
+	New      SessionState = "New"
+	Init     SessionState = "Initializing"
+	Running  SessionState = "Running"
+	Waiting  SessionState = "Waiting"
+	Finalize SessionState = "Finalizing"
+	Success  SessionState = "Success"
+	Failure  SessionState = "Failure"
+	Deleted  SessionState = "Deleted"
+)
+
+type TargetStatus struct {
+	Name         string `json:"name"`
+	Kind         string `json:"kind"`
+	SessionState `json:"state"`
+	SnapshotId   string           `json:"snapshotId"`
+	StartTime    *metav1.Time     `json:"startTime"`
+	Duration     *metav1.Duration `json:"duration"`
+	Try          int              `json:"try"`
+}
 
 // BackupSessionSpec defines the desired state of BackupSession
 type BackupSessionSpec struct {
@@ -31,21 +51,15 @@ type BackupSessionSpec struct {
 
 // BackupSessionStatus defines the observed state of BackupSession
 type BackupSessionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// +optional
-	SessionState `json:"state,omitempty"`
-	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-	// +optional
-	Targets []TargetStatus `json:"target,omitempty"`
-	// +optional
-	Keep string `json:"keep,omitempty"`
+	SessionState `json:"state"`
+	StartTime    *metav1.Time   `json:"startTime"`
+	Targets      []TargetStatus `json:"target"`
+	Keep         string         `json:"keep"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 // +kubebuilder:resource:shortName="bs"
-// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Ref",type=string,JSONPath=`.spec.ref.name`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="Started",type=string,format=date-time,JSONPath=`.status.startTime`
@@ -60,7 +74,7 @@ type BackupSession struct {
 	Status BackupSessionStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
 // BackupSessionList contains a list of BackupSession
 type BackupSessionList struct {

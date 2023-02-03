@@ -1,0 +1,35 @@
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: BackupConfiguration
+metadata:
+  name: backup-demo
+  namespace: demo
+spec:
+  suspend: true
+  image: desmo999r/formolcli:0.3.2
+  repository: repo-empty
+  schedule: "15 * * * *"
+  keep:
+    last: 5
+    daily: 2
+    weekly: 2
+    monthly: 6
+    yearly: 3
+  targets:
+  - backupType: Online
+    targetKind: Deployment
+    targetName: nginx-deployment
+    containers:
+      - name: nginx
+        steps:
+          - name: maintenance-on
+          - name: with-env
+          - name: with-envfrom
+          - name: maintenance-off
+            finalize: true
+        paths:
+          - /data
+#  - kind: Job
+#    name: backup-pg
+#    steps:
+#      - name: backup-pg

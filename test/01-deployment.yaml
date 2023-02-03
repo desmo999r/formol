@@ -18,9 +18,11 @@ spec:
       labels:
         app: nginx
     spec:
+      imagePullSecrets:
+        - name: regcred
       containers:
       - name: nginx
-        image: nginx:1.14.2
+        image: docker.io/nginx:1.23.3
         ports:
         - containerPort: 80
         volumeMounts:

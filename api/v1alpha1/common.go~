@@ -1,0 +1,6 @@
+package v1alpha1
+
+const (
+	SIDECARCONTAINER_NAME string = "formol"
+	TARGETCONTAINER_TAG string = "FORMOL_TARGET"
+)

@@ -6,31 +6,30 @@ metadata:
   namespace: demo
 spec:
   suspend: true
-  image: desmo999r/formolcli:latest
+  image: desmo999r/formolcli:0.3.2
   repository: repo-minio
   schedule: "15 * * * *"
-  targets:
-  - kind: Sidecar
-    apiVersion: v1
-    name: nginx-deployment
-    steps:
-      - name: maintenance-on
-      - name: with-env
-      - name: with-envfrom
-      - name: maintenance-off
-        finalize: true
-    volumeMounts:
-      - name: demo-data
-        mountPath: /data
-    paths:
-      - /data
-#  - kind: Job
-#    name: backup-pg
-#    steps:
-#      - name: backup-pg
   keep:
     last: 5
     daily: 2
     weekly: 2
     monthly: 6
     yearly: 3
+  targets:
+  - backupType: Online
+    targetKind: Deployment
+    targetName: nginx-deployment
+    containers:
+      - name: nginx
+        steps:
+          - name: maintenance-on
+          - name: with-env
+          - name: with-envfrom
+          - name: maintenance-off
+            finalize: true
+        paths:
+          - /data
+#  - kind: Job
+#    name: backup-pg
+#    steps:
+#      - name: backup-pg
