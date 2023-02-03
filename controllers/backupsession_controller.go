@@ -20,12 +20,18 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
+)
+
+const (
+	finalizerName string = "finalizer.backupsession.formol.desmojim.fr"
 )
 
 // BackupSessionReconciler reconciles a BackupSession object
@@ -54,6 +60,42 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.Context = ctx
 
 	r.Log.V(1).Info("Enter Reconcile with req", "req", req, "reconciler", r)
+	backupSession := formolv1alpha1.BackupSession{}
+	err := r.Get(ctx, req.NamespacedName, &backupSession)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	backupConf := formolv1alpha1.BackupConfiguration{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: backupSession.Spec.Ref.Namespace,
+		Name:      backupSession.Spec.Ref.Name,
+	}, &backupConf); err != nil {
+		r.Log.Error(err, "unable to get BackupConfiguration")
+		return ctrl.Result{}, err
+	}
+
+	if !backupSession.ObjectMeta.DeletionTimestamp.IsZero() {
+		r.Log.V(0).Info("BackupSession is being deleted")
+		if controllerutil.ContainsFinalizer(&backupSession, finalizerName) {
+			controllerutil.RemoveFinalizer(&backupSession, finalizerName)
+			err := r.Update(ctx, &backupSession)
+			if err != nil {
+				r.Log.Error(err, "unable to remove finalizer")
+			}
+			return ctrl.Result{}, err
+		}
+	}
+	if !controllerutil.ContainsFinalizer(&backupSession, finalizerName) {
+		controllerutil.AddFinalizer(&backupSession, finalizerName)
+		err := r.Update(ctx, &backupSession)
+		if err != nil {
+			r.Log.Error(err, "unable to add finalizer")
+		}
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }

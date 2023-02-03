@@ -24,10 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
-	formolutils "github.com/desmo999r/formol/pkg/utils"
+	//formolutils "github.com/desmo999r/formol/pkg/utils"
 )
 
 // BackupConfigurationReconciler reconciles a BackupConfiguration object
@@ -70,10 +71,10 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	if !backupConf.ObjectMeta.DeletionTimestamp.IsZero() {
 		r.Log.V(0).Info("backupconf being deleted", "backupconf", backupConf.ObjectMeta.Finalizers)
-		if formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
+		if controllerutil.ContainsFinalizer(&backupConf, finalizerName) {
 			_ = r.DeleteSidecar(backupConf)
 			_ = r.DeleteCronJob(backupConf)
-			backupConf.ObjectMeta.Finalizers = formolutils.RemoveString(backupConf.ObjectMeta.Finalizers, finalizerName)
+			controllerutil.RemoveFinalizer(&backupConf, finalizerName)
 			if err := r.Update(ctx, &backupConf); err != nil {
 				r.Log.Error(err, "unable to remove finalizer")
 				return ctrl.Result{}, err
@@ -85,9 +86,9 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// Add finalizer
-	if !formolutils.ContainsString(backupConf.ObjectMeta.Finalizers, finalizerName) {
+	if !controllerutil.ContainsFinalizer(&backupConf, finalizerName) {
 		r.Log.V(0).Info("adding finalizer", "backupconf", backupConf)
-		backupConf.ObjectMeta.Finalizers = append(backupConf.ObjectMeta.Finalizers, finalizerName)
+		controllerutil.AddFinalizer(&backupConf, finalizerName)
 		if err := r.Update(ctx, &backupConf); err != nil {
 			r.Log.Error(err, "unable to append finalizer")
 			return ctrl.Result{}, err
