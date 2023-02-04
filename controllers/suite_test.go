@@ -50,6 +50,7 @@ const (
 	DEPLOYMENT_NAME = "test-deployment"
 	CONTAINER_NAME  = "test-container"
 	DATAVOLUME_NAME = "data"
+	SECRET_NAME     = "test-secret"
 	timeout         = time.Second * 10
 	interval        = time.Millisecond * 250
 )
@@ -87,6 +88,32 @@ var (
 					},
 				},
 			},
+		},
+	}
+	secret = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      SECRET_NAME,
+			Namespace: NAMESPACE_NAME,
+		},
+		Data: map[string][]byte{
+			"RESTIC_PASSWORD":       []byte("toto"),
+			"AWS_ACCESS_KEY_ID":     []byte("titi"),
+			"AWS_SECRET_ACCESS_KEY": []byte("tata"),
+		},
+	}
+	repo = &formolv1alpha1.Repo{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      REPO_NAME,
+			Namespace: NAMESPACE_NAME,
+		},
+		Spec: formolv1alpha1.RepoSpec{
+			Backend: formolv1alpha1.Backend{
+				S3: &formolv1alpha1.S3{
+					Server: "raid5.desmojim.fr:9000",
+					Bucket: "testbucket2",
+				},
+			},
+			RepositorySecrets: "test-secret",
 		},
 	}
 	cfg       *rest.Config
@@ -127,6 +154,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 	Expect(k8sClient.Create(ctx, namespace)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, repo)).Should(Succeed())
 	Expect(k8sClient.Create(ctx, deployment)).Should(Succeed())
 
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{

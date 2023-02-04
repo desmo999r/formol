@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	batchv1 "k8s.io/api/batch/v1"
 	//"time"
-	//appsv1 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	//corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -130,6 +130,24 @@ var _ = Describe("BackupConfiguration controller", func() {
 			}, timeout, interval).Should(Equal("1 0 * * *"))
 			Expect(*cronJob.Spec.Suspend).Should(BeTrue())
 		})
+		When("The BackupType is an OnlineKind", func() {
+			It("Should create a sidecar container", func() {
+				deployment := &appsv1.Deployment{}
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, types.NamespacedName{
+						Name:      DEPLOYMENT_NAME,
+						Namespace: NAMESPACE_NAME,
+					}, deployment); err != nil {
+						return false
+					}
+					return len(deployment.Spec.Template.Spec.Containers) == 2
+				}, timeout, interval).Should(BeTrue())
+
+				By("Should add Env labels")
+				Expect(deployment.Spec.Template.Spec.Containers[0].Env[0].Name).Should(Equal(formolv1alpha1.TARGETCONTAINER_TAG))
+				Expect(deployment.Spec.Template.Spec.Containers[1].Name).Should(Equal(formolv1alpha1.SIDECARCONTAINER_NAME))
+			})
+		})
 	})
 	Context("Deleting a BackupConf", func() {
 		JustBeforeEach(func() {
@@ -160,6 +178,34 @@ var _ = Describe("BackupConfiguration controller", func() {
 				return true
 			}, timeout, interval).Should(BeFalse())
 
+		})
+		When("The BackupType is an OnlineKind", func() {
+			It("Should delete the sidecar container", func() {
+				deployment := &appsv1.Deployment{}
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, types.NamespacedName{
+						Name:      DEPLOYMENT_NAME,
+						Namespace: NAMESPACE_NAME,
+					}, deployment); err != nil {
+						return false
+					}
+					return len(deployment.Spec.Template.Spec.Containers) == 2
+				}, timeout, interval).Should(BeTrue())
+				Expect(deployment.Spec.Template.Spec.Containers[0].Env[0].Name).Should(Equal(formolv1alpha1.TARGETCONTAINER_TAG))
+				Expect(deployment.Spec.Template.Spec.Containers[1].Name).Should(Equal(formolv1alpha1.SIDECARCONTAINER_NAME))
+				By("The sidecar container has been created. Now deleting the BackupConfiguration")
+				Expect(k8sClient.Delete(ctx, backupConf)).Should(Succeed())
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, types.NamespacedName{
+						Name:      DEPLOYMENT_NAME,
+						Namespace: NAMESPACE_NAME,
+					}, deployment); err != nil {
+						return false
+					}
+					return len(deployment.Spec.Template.Spec.Containers) == 1
+				}, timeout, interval).Should(BeTrue())
+				Expect(len(deployment.Spec.Template.Spec.Containers[0].Env)).Should(Equal(0))
+			})
 		})
 	})
 })
