@@ -13,7 +13,7 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 		for i, container := range podSpec.Containers {
 			for _, targetContainer := range target.Containers {
 				if targetContainer.Name == container.Name {
-					if container.Env[len(container.Env)-1].Name == formolv1alpha1.TARGETCONTAINER_TAG {
+					if len(container.Env) > 1 && container.Env[len(container.Env)-1].Name == formolv1alpha1.TARGETCONTAINER_TAG {
 						podSpec.Containers[i].Env = container.Env[:len(container.Env)-1]
 					} else {
 						for j, e := range container.Env {
