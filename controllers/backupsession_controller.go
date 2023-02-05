@@ -18,9 +18,11 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,6 +33,7 @@ import (
 )
 
 const (
+	sessionState  string = ".metadata.state"
 	finalizerName string = "finalizer.backupsession.formol.desmojim.fr"
 )
 
@@ -46,15 +49,6 @@ type BackupSessionReconciler struct {
 //+kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the BackupSession object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.1/pkg/reconcile
 func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.Log = log.FromContext(ctx)
 	r.Context = ctx
@@ -97,11 +91,41 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	switch backupSession.Status.SessionState {
+	case formolv1alpha1.New:
+		if r.isBackupOngoing(backupConf) {
+			r.Log.V(0).Info("there is an ongoing backup. Let's reschedule this operation")
+			return ctrl.Result{
+				RequeueAfter: 30 * time.Second,
+			}, nil
+		}
+	default:
+		// BackupSession has just been created
+		backupSession.Status.SessionState = formolv1alpha1.New
+		backupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
+		if err := r.Status().Update(ctx, &backupSession); err != nil {
+			r.Log.Error(err, "unable to update BackupSession.Status")
+			return ctrl.Result{}, err
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BackupSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&formolv1alpha1.BackupSession{},
+		sessionState,
+		func(rawObj client.Object) []string {
+			session := rawObj.(*formolv1alpha1.BackupSession)
+			return []string{
+				string(session.Status.SessionState),
+			}
+		}); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&formolv1alpha1.BackupSession{}).
 		Complete(r)
