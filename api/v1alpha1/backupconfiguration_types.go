@@ -47,9 +47,7 @@ type Step struct {
 type TargetContainer struct {
 	Name  string   `json:"name"`
 	Paths []string `json:"paths,omitempty"`
-	// +kubebuilder:default:=2
-	Retry int    `json:"retry"`
-	Steps []Step `json:"steps,omitempty"`
+	Steps []Step   `json:"steps,omitempty"`
 }
 
 type Target struct {
@@ -57,6 +55,8 @@ type Target struct {
 	TargetKind `json:"targetKind"`
 	TargetName string            `json:"targetName"`
 	Containers []TargetContainer `json:"containers"`
+	// +kubebuilder:default:=2
+	Retry int `json:"retry"`
 }
 
 type Keep struct {

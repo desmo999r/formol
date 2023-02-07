@@ -53,9 +53,10 @@ type BackupSessionSpec struct {
 // BackupSessionStatus defines the observed state of BackupSession
 type BackupSessionStatus struct {
 	SessionState `json:"state"`
-	StartTime    *metav1.Time   `json:"startTime"`
-	Targets      []TargetStatus `json:"target,omitempty"`
-	Keep         string         `json:"keep"`
+	StartTime    *metav1.Time `json:"startTime"`
+	// +optional
+	Targets []TargetStatus `json:"target,omitempty"`
+	Keep    string         `json:"keep"`
 }
 
 //+kubebuilder:object:root=true

@@ -116,8 +116,43 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	case formolv1alpha1.Running:
 		// Backup ongoing. Check the status of the last backup task and decide what to do next.
+		currentTargetStatus := &(backupSession.Status.Targets[len(backupSession.Status.Targets)-1])
+		switch currentTargetStatus.SessionState {
+		case formolv1alpha1.Running:
+			r.Log.V(0).Info("Current task is still running. Wait until it's finished")
+		case formolv1alpha1.Success:
+			r.Log.V(0).Info("Last backup task was a success. Start a new one")
+			if nextTargetStatus := r.startNextTask(&backupSession, backupConf); nextTargetStatus != nil {
+				r.Log.V(0).Info("Starting a new task", "task", nextTargetStatus)
+			} else {
+				r.Log.V(0).Info("No more tasks to start. The backup is a success. Let's do some cleanup")
+				backupSession.Status.SessionState = formolv1alpha1.Success
+			}
+			if err := r.Status().Update(ctx, &backupSession); err != nil {
+				r.Log.Error(err, "unable to update BackupSession")
+			}
+			return ctrl.Result{}, err
+		case formolv1alpha1.Failure:
+			// Last task failed. Try to run it again
+			if currentTargetStatus.Try < backupConf.Spec.Targets[len(backupSession.Status.Targets)-1].Retry {
+				r.Log.V(0).Info("Last task failed. Try to run it again")
+				currentTargetStatus.Try++
+				currentTargetStatus.SessionState = formolv1alpha1.New
+				currentTargetStatus.StartTime = &metav1.Time{Time: time.Now()}
+			} else {
+				r.Log.V(0).Info("Task failed again and for the last time")
+				backupSession.Status.SessionState = formolv1alpha1.Failure
+			}
+			if err := r.Status().Update(ctx, &backupSession); err != nil {
+				r.Log.Error(err, "unable to update BackupSession")
+			}
+			return ctrl.Result{}, err
+		}
+
 	case formolv1alpha1.Failure:
 		// Failed backup. Don't do anything anymore
+	case formolv1alpha1.Success:
+		// Backup was a success
 	default:
 		// BackupSession has just been created
 		backupSession.Status.SessionState = formolv1alpha1.New
