@@ -35,8 +35,9 @@ const (
 )
 
 type TargetStatus struct {
-	Name         string `json:"name"`
-	Kind         string `json:"kind"`
+	BackupType   `json:"backupType"`
+	TargetName   string `json:"targetName"`
+	TargetKind   `json:"targetKind"`
 	SessionState `json:"state"`
 	SnapshotId   string           `json:"snapshotId"`
 	StartTime    *metav1.Time     `json:"startTime"`
