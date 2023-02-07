@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 )
@@ -175,17 +177,34 @@ func (r *BackupConfigurationReconciler) AddSidecar(backupConf formolv1alpha1.Bac
 	// the backupType: Online needs a sidecar container for every single listed 'container'
 	// if the backupType is something else than Online, the 'container' will still need a sidecar
 	// if it has 'steps'
-	addTags := func(podSpec *corev1.PodSpec, target formolv1alpha1.Target) bool {
+	addTags := func(sideCar *corev1.Container, podSpec *corev1.PodSpec, target formolv1alpha1.Target) bool {
 		for i, container := range podSpec.Containers {
 			if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
 				return false
 			}
 			for _, targetContainer := range target.Containers {
 				if targetContainer.Name == container.Name {
+					// Found a target container. Tag it.
 					podSpec.Containers[i].Env = append(container.Env, corev1.EnvVar{
 						Name:  formolv1alpha1.TARGETCONTAINER_TAG,
 						Value: container.Name,
 					})
+					// targetContainer.Paths are the paths to backup
+					// We have to find what volumes are mounted under those paths
+					// and mount them under a path that exists in the sidecar container
+					for i, path := range targetContainer.Paths {
+						vm := corev1.VolumeMount{ReadOnly: true}
+						for _, volumeMount := range container.VolumeMounts {
+							var longest int = 0
+							if strings.HasPrefix(path, volumeMount.MountPath) && len(volumeMount.MountPath) > longest {
+								longest = len(volumeMount.MountPath)
+								vm.Name = volumeMount.Name
+								vm.MountPath = fmt.Sprintf("/backup%d", i)
+								vm.SubPath = volumeMount.SubPath
+							}
+						}
+						sideCar.VolumeMounts = append(sideCar.VolumeMounts, vm)
+					}
 				}
 			}
 		}
@@ -233,7 +252,7 @@ func (r *BackupConfigurationReconciler) AddSidecar(backupConf formolv1alpha1.Bac
 					r.Log.Error(err, "cannot get deployment", "Deployment", target.TargetName)
 					return err
 				}
-				if addTags(&deployment.Spec.Template.Spec, target) {
+				if addTags(&sideCar, &deployment.Spec.Template.Spec, target) {
 					deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sideCar)
 					r.Log.V(1).Info("Updating deployment", "deployment", deployment, "containers", deployment.Spec.Template.Spec.Containers)
 					if err := r.Update(r.Context, deployment); err != nil {
