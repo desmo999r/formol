@@ -41,7 +41,7 @@ type TargetStatus struct {
 	SessionState `json:"state"`
 	SnapshotId   string           `json:"snapshotId"`
 	StartTime    *metav1.Time     `json:"startTime"`
-	Duration     *metav1.Duration `json:"duration"`
+	Duration     *metav1.Duration `json:"duration,omitempty"`
 	Try          int              `json:"try"`
 }
 
@@ -54,7 +54,7 @@ type BackupSessionSpec struct {
 type BackupSessionStatus struct {
 	SessionState `json:"state"`
 	StartTime    *metav1.Time   `json:"startTime"`
-	Targets      []TargetStatus `json:"target"`
+	Targets      []TargetStatus `json:"target,omitempty"`
 	Keep         string         `json:"keep"`
 }
 

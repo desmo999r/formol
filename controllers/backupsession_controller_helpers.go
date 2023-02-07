@@ -38,7 +38,7 @@ func (r *BackupSessionReconciler) isBackupOngoing(backupConf formolv1alpha1.Back
 	return len(backupSessionList.Items) > 0
 }
 
-func (r *BackupSessionReconciler) startNextTask(backupSession formolv1alpha1.BackupSession, backupConf formolv1alpha1.BackupConfiguration) (*formolv1alpha1.TargetStatus, error) {
+func (r *BackupSessionReconciler) startNextTask(backupSession *formolv1alpha1.BackupSession, backupConf formolv1alpha1.BackupConfiguration) *formolv1alpha1.TargetStatus {
 	nextTargetIndex := len(backupSession.Status.Targets)
 	if nextTargetIndex < len(backupConf.Spec.Targets) {
 		nextTarget := backupConf.Spec.Targets[nextTargetIndex]
@@ -51,13 +51,16 @@ func (r *BackupSessionReconciler) startNextTask(backupSession formolv1alpha1.Bac
 			Try:          1,
 		}
 		switch nextTarget.BackupType {
+		case formolv1alpha1.OnlineKind:
+			r.Log.V(0).Info("Starts a new OnlineKind task", "target", nextTarget)
 		case formolv1alpha1.JobKind:
 			r.Log.V(0).Info("Starts a new JobKind task", "target", nextTarget)
 		case formolv1alpha1.SnapshotKind:
 			r.Log.V(0).Info("Starts a new SnapshotKind task", "target", nextTarget)
 		}
-		return &nextTargetStatus, nil
+		backupSession.Status.Targets = append(backupSession.Status.Targets, nextTargetStatus)
+		return &nextTargetStatus
 	} else {
-		return nil, nil
+		return nil
 	}
 }

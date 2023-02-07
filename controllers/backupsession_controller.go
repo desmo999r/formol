@@ -99,6 +99,25 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				RequeueAfter: 30 * time.Second,
 			}, nil
 		}
+		if nextTargetStatus := r.startNextTask(&backupSession, backupConf); nextTargetStatus != nil {
+			r.Log.V(0).Info("New backup. Start the first task", "task", nextTargetStatus)
+			backupSession.Status.SessionState = formolv1alpha1.Running
+			if err := r.Status().Update(ctx, &backupSession); err != nil {
+				r.Log.Error(err, "unable to update BackupSession status")
+			}
+			return ctrl.Result{}, err
+		} else {
+			r.Log.V(0).Info("No first target? That should not happen. Mark the backup has failed")
+			backupSession.Status.SessionState = formolv1alpha1.Failure
+			if err := r.Status().Update(ctx, &backupSession); err != nil {
+				r.Log.Error(err, "unable to update BackupSession status")
+			}
+			return ctrl.Result{}, err
+		}
+	case formolv1alpha1.Running:
+		// Backup ongoing. Check the status of the last backup task and decide what to do next.
+	case formolv1alpha1.Failure:
+		// Failed backup. Don't do anything anymore
 	default:
 		// BackupSession has just been created
 		backupSession.Status.SessionState = formolv1alpha1.New
