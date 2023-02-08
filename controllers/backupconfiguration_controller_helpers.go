@@ -21,6 +21,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -28,6 +29,11 @@ import (
 	"strings"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
+)
+
+const (
+	FORMOL_SA           = "formol-controller"
+	FORMOL_SIDECAR_ROLE = "formol:sidecar-role"
 )
 
 func (r *BackupConfigurationReconciler) DeleteCronJob(backupConf formolv1alpha1.BackupConfiguration) error {
@@ -236,10 +242,19 @@ func (r *BackupConfigurationReconciler) AddSidecar(backupConf formolv1alpha1.Bac
 				Name:  formolv1alpha1.SIDECARCONTAINER_NAME,
 				Image: backupConf.Spec.Image,
 				Args:  []string{"backupsession", "server"},
-				Env: append(env, corev1.EnvVar{
-					Name:  formolv1alpha1.TARGET_NAME,
-					Value: target.TargetName,
-				}),
+				Env: append(env,
+					corev1.EnvVar{
+						Name:  formolv1alpha1.TARGET_NAME,
+						Value: target.TargetName,
+					},
+					corev1.EnvVar{
+						Name: formolv1alpha1.POD_NAMESPACE,
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.namespace",
+							},
+						},
+					}),
 				VolumeMounts: []corev1.VolumeMount{},
 			}
 			switch target.TargetKind {
@@ -253,6 +268,15 @@ func (r *BackupConfigurationReconciler) AddSidecar(backupConf formolv1alpha1.Bac
 					return err
 				}
 				if addTags(&sideCar, &deployment.Spec.Template.Spec, target) {
+					if err := r.createRBACSidecar(corev1.ServiceAccount{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: deployment.Namespace,
+							Name:      deployment.Spec.Template.Spec.ServiceAccountName,
+						},
+					}); err != nil {
+						r.Log.Error(err, "unable to create RBAC for the sidecar container")
+						return err
+					}
 					deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sideCar)
 					r.Log.V(1).Info("Updating deployment", "deployment", deployment, "containers", deployment.Spec.Template.Spec.Containers)
 					if err := r.Update(r.Context, deployment); err != nil {
@@ -264,5 +288,86 @@ func (r *BackupConfigurationReconciler) AddSidecar(backupConf formolv1alpha1.Bac
 		}
 	}
 
+	return nil
+}
+
+func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccount) error {
+	//	sa := corev1.ServiceAccount {}
+	//	if err := r.Get(r.Context, client.ObjectKey {
+	//		Namespace: backupConf.Namespace,
+	//		Name: FORMOL_SA,
+	//	}, &sa); err != nil && errors.IsNotFound(err) {
+	//		sa = corev1.ServiceAccount {
+	//			ObjectMeta: metav1.ObjectMeta {
+	//				Namespace: backupConf.Namespace,
+	//				Name: FORMOL_SA,
+	//			},
+	//		}
+	//		r.Log.V(0).Info("Creating formol service account", "sa", sa)
+	//		if err = r.Create(r.Context, &sa); err != nil {
+	//			r.Log.Error(err, "unable to create service account")
+	//			return err
+	//		}
+	//	}
+	if sa.Name == "" {
+		sa.Name = "default"
+	}
+	role := rbacv1.Role{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: sa.Namespace,
+		Name:      FORMOL_SIDECAR_ROLE,
+	}, &role); err != nil && errors.IsNotFound(err) {
+		role = rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: sa.Namespace,
+				Name:      FORMOL_SIDECAR_ROLE,
+			},
+			Rules: []rbacv1.PolicyRule{
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch"},
+					APIGroups: []string{"formol.desmojim.fr"},
+					Resources: []string{"backupsessions", "backupconfigurations"},
+				},
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					APIGroups: []string{"formol.desmojim.fr"},
+					Resources: []string{"backupsessions/status"},
+				},
+			},
+		}
+		r.Log.V(0).Info("Creating formol sidecar role", "role", role)
+		if err = r.Create(r.Context, &role); err != nil {
+			r.Log.Error(err, "unable to create sidecar role")
+			return err
+		}
+	}
+	rolebinding := rbacv1.RoleBinding{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: sa.Namespace,
+		Name:      FORMOL_SIDECAR_ROLE,
+	}, &rolebinding); err != nil && errors.IsNotFound(err) {
+		rolebinding = rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: sa.Namespace,
+				Name:      FORMOL_SIDECAR_ROLE,
+			},
+			Subjects: []rbacv1.Subject{
+				rbacv1.Subject{
+					Kind: "ServiceAccount",
+					Name: sa.Name,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     FORMOL_SIDECAR_ROLE,
+			},
+		}
+		r.Log.V(0).Info("Creating formol sidecar rolebinding", "rolebinding", rolebinding)
+		if err = r.Create(r.Context, &rolebinding); err != nil {
+			r.Log.Error(err, "unable to create sidecar rolebinding")
+			return err
+		}
+	}
 	return nil
 }
