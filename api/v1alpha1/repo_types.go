@@ -23,6 +23,13 @@ import (
 	"strings"
 )
 
+const (
+	RESTIC_REPOSITORY     = "RESTIC_REPOSITORY"
+	RESTIC_PASSWORD       = "RESTIC_PASSWORD"
+	AWS_ACCESS_KEY_ID     = "AWS_ACCESS_KEY_ID"
+	AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 type S3 struct {
@@ -83,13 +90,13 @@ func (repo *Repo) GetResticEnv(backupConf BackupConfiguration) []corev1.EnvVar {
 			strings.ToUpper(backupConf.Namespace),
 			strings.ToLower(backupConf.Name))
 		env = append(env, corev1.EnvVar{
-			Name:  "RESTIC_REPOSITORY",
+			Name:  RESTIC_REPOSITORY,
 			Value: url,
 		})
 		for _, key := range []string{
-			"AWS_ACCESS_KEY_ID",
-			"AWS_SECRET_ACCESS_KEY",
-			"RESTIC_PASSWORD",
+			AWS_ACCESS_KEY_ID,
+			AWS_SECRET_ACCESS_KEY,
+			RESTIC_PASSWORD,
 		} {
 			env = append(env, corev1.EnvVar{
 				Name: key,
