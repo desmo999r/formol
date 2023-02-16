@@ -24,9 +24,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"path/filepath"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 )
@@ -178,11 +178,12 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 	return nil
 }
 
-func (r *BackupConfigurationReconciler) AddOnlineSidecar(backupConf formolv1alpha1.BackupConfiguration, target formolv1alpha1.Target) error {
-	addTags := func(sideCar *corev1.Container, podSpec *corev1.PodSpec, target formolv1alpha1.Target) bool {
+func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alpha1.BackupConfiguration, target formolv1alpha1.Target) (sidecarPaths []string, err error) {
+	addTags := func(sideCar *corev1.Container, podSpec *corev1.PodSpec, target formolv1alpha1.Target) ([]string, bool) {
+		var sidecarPaths []string
 		for i, container := range podSpec.Containers {
 			if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
-				return false
+				return sidecarPaths, false
 			}
 			for _, targetContainer := range target.Containers {
 				if targetContainer.Name == container.Name {
@@ -196,30 +197,34 @@ func (r *BackupConfigurationReconciler) AddOnlineSidecar(backupConf formolv1alph
 					// and mount them under a path that exists in the sidecar container
 					for i, path := range targetContainer.Paths {
 						vm := corev1.VolumeMount{ReadOnly: true}
+						var longest int = 0
+						var sidecarPath string
 						for _, volumeMount := range container.VolumeMounts {
-							var longest int = 0
-							if strings.HasPrefix(path, volumeMount.MountPath) && len(volumeMount.MountPath) > longest {
+							// if strings.HasPrefix(path, volumeMount.MountPath) && len(volumeMount.MountPath) > longest {
+							if rel, err := filepath.Rel(volumeMount.MountPath, path); err == nil && len(volumeMount.MountPath) > longest {
 								longest = len(volumeMount.MountPath)
 								vm.Name = volumeMount.Name
-								vm.MountPath = fmt.Sprintf("/backup%d", i)
+								vm.MountPath = fmt.Sprintf("/%s%d", formolv1alpha1.BACKUP_PREFIX_PATH, i)
 								vm.SubPath = volumeMount.SubPath
+								sidecarPath = filepath.Join(vm.MountPath, rel)
 							}
 						}
 						sideCar.VolumeMounts = append(sideCar.VolumeMounts, vm)
+						sidecarPaths = append(sidecarPaths, sidecarPath)
 					}
 				}
 			}
 		}
-		return true
+		return sidecarPaths, true
 	}
 
 	repo := formolv1alpha1.Repo{}
-	if err := r.Get(r.Context, client.ObjectKey{
+	if err = r.Get(r.Context, client.ObjectKey{
 		Namespace: backupConf.Namespace,
 		Name:      backupConf.Spec.Repository,
 	}, &repo); err != nil {
 		r.Log.Error(err, "unable to get Repo")
-		return err
+		return
 	}
 	r.Log.V(1).Info("Got Repository", "repo", repo)
 	env := repo.GetResticEnv(backupConf)
@@ -245,33 +250,34 @@ func (r *BackupConfigurationReconciler) AddOnlineSidecar(backupConf formolv1alph
 	switch target.TargetKind {
 	case formolv1alpha1.Deployment:
 		deployment := &appsv1.Deployment{}
-		if err := r.Get(r.Context, client.ObjectKey{
+		if err = r.Get(r.Context, client.ObjectKey{
 			Namespace: backupConf.Namespace,
 			Name:      target.TargetName,
 		}, deployment); err != nil {
 			r.Log.Error(err, "cannot get deployment", "Deployment", target.TargetName)
-			return err
+			return
 		}
-		if addTags(&sideCar, &deployment.Spec.Template.Spec, target) {
-			if err := r.createRBACSidecar(corev1.ServiceAccount{
+		if paths, add := addTags(&sideCar, &deployment.Spec.Template.Spec, target); add == true {
+			sidecarPaths = paths
+			if err = r.createRBACSidecar(corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: deployment.Namespace,
 					Name:      deployment.Spec.Template.Spec.ServiceAccountName,
 				},
 			}); err != nil {
 				r.Log.Error(err, "unable to create RBAC for the sidecar container")
-				return err
+				return
 			}
 			deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sideCar)
 			r.Log.V(1).Info("Updating deployment", "deployment", deployment, "containers", deployment.Spec.Template.Spec.Containers)
-			if err := r.Update(r.Context, deployment); err != nil {
+			if err = r.Update(r.Context, deployment); err != nil {
 				r.Log.Error(err, "cannot update deployment", "Deployment", deployment)
-				return err
+				return
 			}
 		}
 	}
 
-	return nil
+	return
 }
 
 func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccount) error {

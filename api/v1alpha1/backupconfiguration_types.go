@@ -38,6 +38,8 @@ const (
 	JobKind      BackupType = "Job"
 )
 
+const BACKUP_PREFIX_PATH = `backup`
+
 type Step struct {
 	Name string `json:"name"`
 	// +optional
@@ -57,6 +59,11 @@ type Target struct {
 	Containers []TargetContainer `json:"containers"`
 	// +kubebuilder:default:=2
 	Retry int `json:"retry"`
+}
+
+type TargetSidecarPath struct {
+	TargetName   string   `json:"targetName"`
+	SidecarPaths []string `json:"sidecarPaths"`
 }
 
 type Keep struct {
@@ -84,6 +91,8 @@ type BackupConfigurationStatus struct {
 	Suspended      bool         `json:"suspended"`
 	ActiveCronJob  bool         `json:"activeCronJob"`
 	ActiveSidecar  bool         `json:"activeSidecar"`
+	// +optional
+	Targets []TargetSidecarPath `json:"targets,omitempty"`
 }
 
 //+kubebuilder:object:root=true
