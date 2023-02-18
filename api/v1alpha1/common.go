@@ -10,4 +10,6 @@ const (
 	// Used by the backupsession controller
 	POD_NAME      string = "POD_NAME"
 	POD_NAMESPACE string = "POD_NAMESPACE"
+	// Backup Paths list
+	BACKUP_PATHS = "BACKUP_PATHS"
 )

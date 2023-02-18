@@ -24,9 +24,11 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
 	"path/filepath"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 
 	formolv1alpha1 "github.com/desmo999r/formol/api/v1alpha1"
 )
@@ -178,13 +180,18 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 	return nil
 }
 
-func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alpha1.BackupConfiguration, target formolv1alpha1.Target) (sidecarPaths []string, err error) {
-	addTags := func(sideCar *corev1.Container, podSpec *corev1.PodSpec, target formolv1alpha1.Target) ([]string, bool) {
-		var sidecarPaths []string
+func hasSidecar(podSpec *corev1.PodSpec) bool {
+	for _, container := range podSpec.Containers {
+		if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alpha1.BackupConfiguration, target formolv1alpha1.Target) (err error) {
+	addTags := func(podSpec *corev1.PodSpec, target formolv1alpha1.Target) (sidecarPaths []string, vms []corev1.VolumeMount) {
 		for i, container := range podSpec.Containers {
-			if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
-				return sidecarPaths, false
-			}
 			for _, targetContainer := range target.Containers {
 				if targetContainer.Name == container.Name {
 					// Found a target container. Tag it.
@@ -209,13 +216,13 @@ func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alph
 								sidecarPath = filepath.Join(vm.MountPath, rel)
 							}
 						}
-						sideCar.VolumeMounts = append(sideCar.VolumeMounts, vm)
+						vms = append(vms, vm)
 						sidecarPaths = append(sidecarPaths, sidecarPath)
 					}
 				}
 			}
 		}
-		return sidecarPaths, true
+		return
 	}
 
 	repo := formolv1alpha1.Repo{}
@@ -224,11 +231,11 @@ func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alph
 		Name:      backupConf.Spec.Repository,
 	}, &repo); err != nil {
 		r.Log.Error(err, "unable to get Repo")
-		return
+		return err
 	}
 	r.Log.V(1).Info("Got Repository", "repo", repo)
 	env := repo.GetResticEnv(backupConf)
-	sideCar := corev1.Container{
+	sidecar := corev1.Container{
 		Name:  formolv1alpha1.SIDECARCONTAINER_NAME,
 		Image: backupConf.Spec.Image,
 		Args:  []string{"backupsession", "server"},
@@ -247,33 +254,44 @@ func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alph
 			}),
 		VolumeMounts: []corev1.VolumeMount{},
 	}
+	var targetObject client.Object
+	var targetPodSpec *corev1.PodSpec
 	switch target.TargetKind {
 	case formolv1alpha1.Deployment:
-		deployment := &appsv1.Deployment{}
+		deployment := appsv1.Deployment{}
 		if err = r.Get(r.Context, client.ObjectKey{
 			Namespace: backupConf.Namespace,
 			Name:      target.TargetName,
-		}, deployment); err != nil {
+		}, &deployment); err != nil {
 			r.Log.Error(err, "cannot get deployment", "Deployment", target.TargetName)
 			return
 		}
-		if paths, add := addTags(&sideCar, &deployment.Spec.Template.Spec, target); add == true {
-			sidecarPaths = paths
-			if err = r.createRBACSidecar(corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: deployment.Namespace,
-					Name:      deployment.Spec.Template.Spec.ServiceAccountName,
-				},
-			}); err != nil {
-				r.Log.Error(err, "unable to create RBAC for the sidecar container")
-				return
-			}
-			deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sideCar)
-			r.Log.V(1).Info("Updating deployment", "deployment", deployment, "containers", deployment.Spec.Template.Spec.Containers)
-			if err = r.Update(r.Context, deployment); err != nil {
-				r.Log.Error(err, "cannot update deployment", "Deployment", deployment)
-				return
-			}
+		targetObject = &deployment
+		targetPodSpec = &deployment.Spec.Template.Spec
+	}
+	if !hasSidecar(targetPodSpec) {
+		if err = r.createRBACSidecar(corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: backupConf.Namespace,
+				Name:      targetPodSpec.ServiceAccountName,
+			},
+		}); err != nil {
+			r.Log.Error(err, "unable to create RBAC for the sidecar container")
+			return
+		}
+		sidecarPaths, vms := addTags(targetPodSpec, target)
+		sidecar.VolumeMounts = vms
+		sidecar.Env = append(sidecar.Env, corev1.EnvVar{
+			Name:  formolv1alpha1.BACKUP_PATHS,
+			Value: strings.Join(sidecarPaths, string(os.PathListSeparator)),
+		})
+
+		// The sidecar definition is complete. Add it to the targetObject
+		targetPodSpec.Containers = append(targetPodSpec.Containers, sidecar)
+		r.Log.V(1).Info("Adding sidecar", "targetObject", targetObject, "sidecar", sidecar)
+		if err = r.Update(r.Context, targetObject); err != nil {
+			r.Log.Error(err, "unable to add sidecar", "targetObject", targetObject)
+			return
 		}
 	}
 

@@ -61,11 +61,6 @@ type Target struct {
 	Retry int `json:"retry"`
 }
 
-type TargetSidecarPath struct {
-	TargetName   string   `json:"targetName"`
-	SidecarPaths []string `json:"sidecarPaths"`
-}
-
 type Keep struct {
 	Last    int32 `json:"last"`
 	Daily   int32 `json:"daily"`
@@ -91,8 +86,6 @@ type BackupConfigurationStatus struct {
 	Suspended      bool         `json:"suspended"`
 	ActiveCronJob  bool         `json:"activeCronJob"`
 	ActiveSidecar  bool         `json:"activeSidecar"`
-	// +optional
-	Targets []TargetSidecarPath `json:"targets,omitempty"`
 }
 
 //+kubebuilder:object:root=true

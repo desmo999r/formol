@@ -97,15 +97,9 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 		switch target.BackupType {
 		case formolv1alpha1.OnlineKind:
 			// TODO: add a sidecar to the pod with the target.Containers[].Paths mounted
-			if sidecarPaths, err := r.addOnlineSidecar(backupConf, target); err != nil {
+			if err := r.addOnlineSidecar(backupConf, target); err != nil {
 				r.Log.Error(err, "unable to add online sidecar")
 				return ctrl.Result{}, err
-			} else if len(sidecarPaths) > 0 {
-				backupConf.Status.Targets = append(backupConf.Status.Targets,
-					formolv1alpha1.TargetSidecarPath{
-						TargetName:   target.TargetName,
-						SidecarPaths: sidecarPaths,
-					})
 			}
 			backupConf.Status.ActiveSidecar = true
 		case formolv1alpha1.JobKind:
