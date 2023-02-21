@@ -74,11 +74,12 @@ data:
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: Repo
 metadata:
-  name: repo-empty
+  name: repo-local
   namespace: demo
 spec:
   backend:
-    nfs: "toto"
+    local:
+      path: /repo
   repositorySecrets: secret-minio
 ---
 apiVersion: formol.desmojim.fr/v1alpha1
@@ -162,7 +163,7 @@ metadata:
   namespace: demo
 spec:
   name: maintenance-off
-  command: ["/bin/bash", "-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-off >> /data/logs.txt"]
+  command: ["/bin/sh", "-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-off >> /data/logs.txt"]
 ---
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: Function
@@ -171,4 +172,4 @@ metadata:
   namespace: demo
 spec:
   name: maintenance-on
-  command: ["/bin/bash", "-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-on >> /data/logs.txt"]
+  command: ["/bin/sh", "-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-on >> /data/logs.txt"]

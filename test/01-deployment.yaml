@@ -2,27 +2,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx-deployment
+  name: apache-deployment
   namespace: demo
   labels:
-    app: nginx
+    app: apache
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: nginx
+      app: apache
   template:
     metadata:
       labels:
-        app: nginx
+        app: apache
     spec:
       imagePullSecrets:
         - name: regcred
       containers:
-      - name: nginx
-        image: docker.io/nginx:1.23.3
+      - name: apache
+        image: docker.io/httpd:alpine3.17
         ports:
         - containerPort: 80
         volumeMounts:
