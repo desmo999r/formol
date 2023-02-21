@@ -64,6 +64,7 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 		if controllerutil.ContainsFinalizer(&backupConf, finalizerName) {
 			_ = r.DeleteSidecar(backupConf)
 			_ = r.DeleteCronJob(backupConf)
+			_ = r.deleteRBACSidecar(backupConf.Namespace)
 			controllerutil.RemoveFinalizer(&backupConf, finalizerName)
 			if err := r.Update(ctx, &backupConf); err != nil {
 				r.Log.Error(err, "unable to remove finalizer")
@@ -96,16 +97,15 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 	for _, target := range backupConf.Spec.Targets {
 		switch target.BackupType {
 		case formolv1alpha1.OnlineKind:
-			// TODO: add a sidecar to the pod with the target.Containers[].Paths mounted
 			if err := r.addOnlineSidecar(backupConf, target); err != nil {
 				r.Log.Error(err, "unable to add online sidecar")
 				return ctrl.Result{}, err
 			}
 			backupConf.Status.ActiveSidecar = true
 		case formolv1alpha1.JobKind:
-			// TODO: add a sidecar to the pod with a shared
+			// TODO: add a sidecar to the pod with a shared volume
 		case formolv1alpha1.SnapshotKind:
-			// TOD: add a sidecar to run the steps
+			// TODO: add a sidecar to run the steps
 		}
 	}
 

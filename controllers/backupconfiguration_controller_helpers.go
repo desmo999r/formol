@@ -336,24 +336,39 @@ func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alph
 	return
 }
 
+func (r *BackupConfigurationReconciler) deleteRBACSidecar(namespace string) error {
+	podList := corev1.PodList{}
+	if err := r.List(r.Context, &podList, &client.ListOptions{
+		Namespace: namespace,
+	}); err != nil {
+		r.Log.Error(err, "unable to get the list of pods", "namespace", namespace)
+		return err
+	}
+	for _, pod := range podList.Items {
+		for _, container := range pod.Spec.Containers {
+			for _, env := range container.Env {
+				if env.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
+					// There is still a sidecar in the namespace.
+					// cannot delete the sidecar role
+					return nil
+				}
+			}
+		}
+	}
+	role := rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      FORMOL_SIDECAR_ROLE,
+		},
+	}
+	if err := r.Delete(r.Context, &role); err != nil {
+		r.Log.Error(err, "unable to delete sidecar role")
+		return err
+	}
+	return nil
+}
+
 func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccount) error {
-	//	sa := corev1.ServiceAccount {}
-	//	if err := r.Get(r.Context, client.ObjectKey {
-	//		Namespace: backupConf.Namespace,
-	//		Name: FORMOL_SA,
-	//	}, &sa); err != nil && errors.IsNotFound(err) {
-	//		sa = corev1.ServiceAccount {
-	//			ObjectMeta: metav1.ObjectMeta {
-	//				Namespace: backupConf.Namespace,
-	//				Name: FORMOL_SA,
-	//			},
-	//		}
-	//		r.Log.V(0).Info("Creating formol service account", "sa", sa)
-	//		if err = r.Create(r.Context, &sa); err != nil {
-	//			r.Log.Error(err, "unable to create service account")
-	//			return err
-	//		}
-	//	}
 	if sa.Name == "" {
 		sa.Name = "default"
 	}
