@@ -150,30 +150,54 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 			}
 		}
 	}
+	repo := formolv1alpha1.Repo{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: backupConf.Namespace,
+		Name:      backupConf.Spec.Repository,
+	}, &repo); err != nil {
+		r.Log.Error(err, "unable to get Repo")
+		return err
+	}
+	r.Log.V(1).Info("Got Repository", "repo", repo)
 	for _, target := range backupConf.Spec.Targets {
+		var targetObject client.Object
+		var targetPodSpec *corev1.PodSpec
 		switch target.TargetKind {
 		case formolv1alpha1.Deployment:
-			deployment := &appsv1.Deployment{}
+			deployment := appsv1.Deployment{}
 			if err := r.Get(r.Context, client.ObjectKey{
 				Namespace: backupConf.Namespace,
 				Name:      target.TargetName,
-			}, deployment); err != nil {
+			}, &deployment); err != nil {
 				r.Log.Error(err, "cannot get deployment", "Deployment", target.TargetName)
 				return err
 			}
-			restoreContainers := []corev1.Container{}
-			for _, container := range deployment.Spec.Template.Spec.Containers {
-				if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
+			targetObject = &deployment
+			targetPodSpec = &deployment.Spec.Template.Spec
+
+		}
+		restoreContainers := []corev1.Container{}
+		for _, container := range targetPodSpec.Containers {
+			if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
+				continue
+			}
+			restoreContainers = append(restoreContainers, container)
+		}
+		targetPodSpec.Containers = restoreContainers
+		if repo.Spec.Backend.Local != nil {
+			restoreVolumes := []corev1.Volume{}
+			for _, volume := range targetPodSpec.Volumes {
+				if volume.Name == "restic-local-repo" {
 					continue
 				}
-				restoreContainers = append(restoreContainers, container)
+				restoreVolumes = append(restoreVolumes, volume)
 			}
-			deployment.Spec.Template.Spec.Containers = restoreContainers
-			removeTags(&deployment.Spec.Template.Spec, target)
-			if err := r.Update(r.Context, deployment); err != nil {
-				r.Log.Error(err, "unable to update deployment", "deployment", deployment)
-				return err
-			}
+			targetPodSpec.Volumes = restoreVolumes
+		}
+		removeTags(targetPodSpec, target)
+		if err := r.Update(r.Context, targetObject); err != nil {
+			r.Log.Error(err, "unable to remove sidecar", "targetObject", targetObject)
+			return err
 		}
 	}
 
@@ -280,14 +304,28 @@ func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alph
 			return
 		}
 		sidecarPaths, vms := addTags(targetPodSpec, target)
-		sidecar.VolumeMounts = vms
 		sidecar.Env = append(sidecar.Env, corev1.EnvVar{
 			Name:  formolv1alpha1.BACKUP_PATHS,
 			Value: strings.Join(sidecarPaths, string(os.PathListSeparator)),
 		})
+		if repo.Spec.Backend.Local != nil {
+			sidecar.VolumeMounts = append(vms, corev1.VolumeMount{
+				Name:      "restic-local-repo",
+				MountPath: "/repo",
+			})
+			targetPodSpec.Volumes = append(targetPodSpec.Volumes, corev1.Volume{
+				Name: "restic-local-repo",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			})
+		} else {
+			sidecar.VolumeMounts = vms
+		}
 
 		// The sidecar definition is complete. Add it to the targetObject
 		targetPodSpec.Containers = append(targetPodSpec.Containers, sidecar)
+		targetPodSpec.ShareProcessNamespace = func() *bool { b := true; return &b }()
 		r.Log.V(1).Info("Adding sidecar", "targetObject", targetObject, "sidecar", sidecar)
 		if err = r.Update(r.Context, targetObject); err != nil {
 			r.Log.Error(err, "unable to add sidecar", "targetObject", targetObject)
@@ -333,7 +371,7 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch"},
 					APIGroups: []string{"formol.desmojim.fr"},
-					Resources: []string{"backupsessions", "backupconfigurations"},
+					Resources: []string{"backupsessions", "backupconfigurations", "functions", "repos"},
 				},
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},

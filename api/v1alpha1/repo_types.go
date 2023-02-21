@@ -30,8 +30,6 @@ const (
 	AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 type S3 struct {
 	Server string `json:"server"`
 	Bucket string `json:"bucket"`
@@ -39,11 +37,15 @@ type S3 struct {
 	Prefix string `json:"prefix,omitempty"`
 }
 
+type Local struct {
+	Path string `json:"path"`
+}
+
 type Backend struct {
 	// +optional
 	S3 *S3 `json:"s3,omitempty"`
 	// +optional
-	Nfs *string `json:"nfs,omitempty"`
+	Local *Local `json:"local,omitempty"`
 }
 
 // RepoSpec defines the desired state of Repo
@@ -96,7 +98,6 @@ func (repo *Repo) GetResticEnv(backupConf BackupConfiguration) []corev1.EnvVar {
 		for _, key := range []string{
 			AWS_ACCESS_KEY_ID,
 			AWS_SECRET_ACCESS_KEY,
-			RESTIC_PASSWORD,
 		} {
 			env = append(env, corev1.EnvVar{
 				Name: key,
@@ -111,6 +112,23 @@ func (repo *Repo) GetResticEnv(backupConf BackupConfiguration) []corev1.EnvVar {
 			})
 		}
 	}
+	if repo.Spec.Backend.Local != nil {
+		env = append(env, corev1.EnvVar{
+			Name:  RESTIC_REPOSITORY,
+			Value: repo.Spec.Backend.Local.Path,
+		})
+	}
+	env = append(env, corev1.EnvVar{
+		Name: RESTIC_PASSWORD,
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: repo.Spec.RepositorySecrets,
+				},
+				Key: RESTIC_PASSWORD,
+			},
+		},
+	})
 
 	return env
 }
