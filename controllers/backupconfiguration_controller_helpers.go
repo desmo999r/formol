@@ -334,6 +334,7 @@ func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alph
 	return
 }
 
+// Delete the sidecar role is there is no more sidecar container in the namespace
 func (r *BackupConfigurationReconciler) deleteRBACSidecar(namespace string) error {
 	podList := corev1.PodList{}
 	if err := r.List(r.Context, &podList, &client.ListOptions{
@@ -366,6 +367,8 @@ func (r *BackupConfigurationReconciler) deleteRBACSidecar(namespace string) erro
 	return nil
 }
 
+// Creates a role to allow the BackupSession controller in the sidecar to have access to resources
+// like Repo, Functions, ...
 func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccount) error {
 	if sa.Name == "" {
 		sa.Name = "default"
