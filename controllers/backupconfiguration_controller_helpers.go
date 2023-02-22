@@ -187,7 +187,7 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 		if repo.Spec.Backend.Local != nil {
 			restoreVolumes := []corev1.Volume{}
 			for _, volume := range targetPodSpec.Volumes {
-				if volume.Name == "restic-local-repo" {
+				if volume.Name == formolv1alpha1.RESTIC_REPO_VOLUME {
 					continue
 				}
 				restoreVolumes = append(restoreVolumes, volume)
@@ -310,14 +310,12 @@ func (r *BackupConfigurationReconciler) addOnlineSidecar(backupConf formolv1alph
 		})
 		if repo.Spec.Backend.Local != nil {
 			sidecar.VolumeMounts = append(vms, corev1.VolumeMount{
-				Name:      "restic-local-repo",
-				MountPath: "/repo",
+				Name:      formolv1alpha1.RESTIC_REPO_VOLUME,
+				MountPath: formolv1alpha1.RESTIC_REPO_PATH,
 			})
 			targetPodSpec.Volumes = append(targetPodSpec.Volumes, corev1.Volume{
-				Name: "restic-local-repo",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
+				Name:         formolv1alpha1.RESTIC_REPO_VOLUME,
+				VolumeSource: repo.Spec.Backend.Local.VolumeSource,
 			})
 		} else {
 			sidecar.VolumeMounts = vms

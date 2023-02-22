@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	RESTIC_REPO_VOLUME    = "restic-volume"
+	RESTIC_REPO_PATH      = "/restic-repo"
 	RESTIC_REPOSITORY     = "RESTIC_REPOSITORY"
 	RESTIC_PASSWORD       = "RESTIC_PASSWORD"
 	AWS_ACCESS_KEY_ID     = "AWS_ACCESS_KEY_ID"
@@ -38,7 +40,7 @@ type S3 struct {
 }
 
 type Local struct {
-	Path string `json:"path"`
+	corev1.VolumeSource `json:"source"`
 }
 
 type Backend struct {
@@ -115,7 +117,7 @@ func (repo *Repo) GetResticEnv(backupConf BackupConfiguration) []corev1.EnvVar {
 	if repo.Spec.Backend.Local != nil {
 		env = append(env, corev1.EnvVar{
 			Name:  RESTIC_REPOSITORY,
-			Value: repo.Spec.Backend.Local.Path,
+			Value: RESTIC_REPO_PATH,
 		})
 	}
 	env = append(env, corev1.EnvVar{
