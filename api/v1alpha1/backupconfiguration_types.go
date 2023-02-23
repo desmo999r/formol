@@ -47,9 +47,11 @@ type Step struct {
 }
 
 type TargetContainer struct {
-	Name  string   `json:"name"`
+	Name string `json:"name"`
+	// +optional
 	Paths []string `json:"paths,omitempty"`
-	Steps []Step   `json:"steps,omitempty"`
+	// +optional
+	Steps []Step `json:"steps,omitempty"`
 }
 
 type Target struct {

@@ -95,18 +95,11 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	for _, target := range backupConf.Spec.Targets {
-		switch target.BackupType {
-		case formolv1alpha1.OnlineKind:
-			if err := r.addOnlineSidecar(backupConf, target); err != nil {
-				r.Log.Error(err, "unable to add online sidecar")
-				return ctrl.Result{}, err
-			}
-			backupConf.Status.ActiveSidecar = true
-		case formolv1alpha1.JobKind:
-			// TODO: add a sidecar to the pod with a shared volume
-		case formolv1alpha1.SnapshotKind:
-			// TODO: add a sidecar to run the steps
+		if err := r.addSidecar(backupConf, target); err != nil {
+			r.Log.Error(err, "unable to add online sidecar")
+			return ctrl.Result{}, err
 		}
+		backupConf.Status.ActiveSidecar = true
 	}
 
 	if err := r.Status().Update(ctx, &backupConf); err != nil {
