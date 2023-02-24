@@ -40,7 +40,8 @@ type S3 struct {
 }
 
 type Local struct {
-	corev1.VolumeSource `json:"source"`
+	//corev1.VolumeSource `json:"source"`
+	corev1.VolumeSource `json:",inline"`
 }
 
 type Backend struct {

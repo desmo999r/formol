@@ -175,25 +175,48 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 			targetObject = &deployment
 			targetPodSpec = &deployment.Spec.Template.Spec
 
+		case formolv1alpha1.StatefulSet:
+			statefulSet := appsv1.StatefulSet{}
+			if err := r.Get(r.Context, client.ObjectKey{
+				Namespace: backupConf.Namespace,
+				Name:      target.TargetName,
+			}, &statefulSet); err != nil {
+				r.Log.Error(err, "cannot get deployment", "Deployment", target.TargetName)
+				return err
+			}
+			targetObject = &statefulSet
+			targetPodSpec = &statefulSet.Spec.Template.Spec
+
 		}
 		restoreContainers := []corev1.Container{}
 		for _, container := range targetPodSpec.Containers {
 			if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
 				continue
 			}
+			restoreVms := []corev1.VolumeMount{}
+			for _, vm := range container.VolumeMounts {
+				if vm.Name == formolv1alpha1.FORMOL_SHARED_VOLUME {
+					r.Log.V(0).Info("cleanup VolumeMounts", "container", container.Name, "VolumeMount", vm.Name)
+					continue
+				}
+				restoreVms = append(restoreVms, vm)
+			}
+			r.Log.V(0).Info("cleanup VolumeMounts", "container", container.Name, "restoreVms", restoreVms)
+			container.VolumeMounts = restoreVms
 			restoreContainers = append(restoreContainers, container)
 		}
 		targetPodSpec.Containers = restoreContainers
-		if repo.Spec.Backend.Local != nil {
-			restoreVolumes := []corev1.Volume{}
-			for _, volume := range targetPodSpec.Volumes {
-				if volume.Name == formolv1alpha1.RESTIC_REPO_VOLUME {
-					continue
-				}
-				restoreVolumes = append(restoreVolumes, volume)
+		restoreVolumes := []corev1.Volume{}
+		for _, volume := range targetPodSpec.Volumes {
+			if volume.Name == formolv1alpha1.RESTIC_REPO_VOLUME {
+				continue
 			}
-			targetPodSpec.Volumes = restoreVolumes
+			if volume.Name == formolv1alpha1.FORMOL_SHARED_VOLUME {
+				continue
+			}
+			restoreVolumes = append(restoreVolumes, volume)
 		}
+		targetPodSpec.Volumes = restoreVolumes
 		removeTags(targetPodSpec, target)
 		if err := r.Update(r.Context, targetObject); err != nil {
 			r.Log.Error(err, "unable to remove sidecar", "targetObject", targetObject)
@@ -257,6 +280,17 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 		}
 		targetObject = &deployment
 		targetPodSpec = &deployment.Spec.Template.Spec
+	case formolv1alpha1.StatefulSet:
+		statefulSet := appsv1.StatefulSet{}
+		if err = r.Get(r.Context, client.ObjectKey{
+			Namespace: backupConf.Namespace,
+			Name:      target.TargetName,
+		}, &statefulSet); err != nil {
+			r.Log.Error(err, "cannot get deployment", "Deployment", target.TargetName)
+			return
+		}
+		targetObject = &statefulSet
+		targetPodSpec = &statefulSet.Spec.Template.Spec
 	}
 	if !hasSidecar(targetPodSpec) {
 		if err = r.createRBACSidecar(corev1.ServiceAccount{
@@ -276,6 +310,8 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 				Value: strings.Join(sidecarPaths, string(os.PathListSeparator)),
 			})
 			sidecar.VolumeMounts = vms
+		case formolv1alpha1.JobKind:
+			sidecar.VolumeMounts = addJobSidecarTags(targetPodSpec, target)
 		}
 		if repo.Spec.Backend.Local != nil {
 			sidecar.VolumeMounts = append(sidecar.VolumeMounts, corev1.VolumeMount{
@@ -398,6 +434,45 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 		}
 	}
 	return nil
+}
+
+func addJobSidecarTags(podSpec *corev1.PodSpec, target formolv1alpha1.Target) (vms []corev1.VolumeMount) {
+	for i, container := range podSpec.Containers {
+		for _, targetContainer := range target.Containers {
+			if targetContainer.Name == container.Name {
+				// Found a target container. Tag it.
+				podSpec.Containers[i].Env = append(container.Env, corev1.EnvVar{
+					Name:  formolv1alpha1.TARGETCONTAINER_TAG,
+					Value: container.Name,
+				})
+				// Create a shared mount between the target and sidecar container
+				// the output of the Job will be saved in the shared volume
+				// and restic will then backup the content of the volume
+				var addSharedVol bool = true
+				for _, vol := range podSpec.Volumes {
+					if vol.Name == formolv1alpha1.FORMOL_SHARED_VOLUME {
+						addSharedVol = false
+					}
+				}
+				if addSharedVol {
+					podSpec.Volumes = append(podSpec.Volumes,
+						corev1.Volume{
+							Name:         formolv1alpha1.FORMOL_SHARED_VOLUME,
+							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+						})
+				}
+				podSpec.Containers[i].VolumeMounts = append(podSpec.Containers[i].VolumeMounts, corev1.VolumeMount{
+					Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
+					MountPath: targetContainer.SharePath,
+				})
+				vms = append(vms, corev1.VolumeMount{
+					Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
+					MountPath: targetContainer.SharePath,
+				})
+			}
+		}
+	}
+	return
 }
 
 func addOnlineSidecarTags(podSpec *corev1.PodSpec, target formolv1alpha1.Target) (sidecarPaths []string, vms []corev1.VolumeMount) {

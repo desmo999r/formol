@@ -27,6 +27,11 @@ spec:
             finalize: true
         paths:
           - /data
+  - backupType: Job
+    targetKind: StatefulSet
+    targetName: postgres-demo
+    containers:
+      - name: postgres
 #  - kind: Job
 #    name: backup-pg
 #    steps:

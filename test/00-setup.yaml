@@ -79,8 +79,7 @@ metadata:
 spec:
   backend:
     local:
-      source:
-        emptyDir:
+      emptyDir:
   repositorySecrets: secret-minio
 ---
 apiVersion: formol.desmojim.fr/v1alpha1

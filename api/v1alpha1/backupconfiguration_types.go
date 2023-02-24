@@ -38,7 +38,10 @@ const (
 	JobKind      BackupType = "Job"
 )
 
-const BACKUP_PREFIX_PATH = `backup`
+const (
+	BACKUP_PREFIX_PATH   = `backup`
+	FORMOL_SHARED_VOLUME = `formol-shared`
+)
 
 type Step struct {
 	Name string `json:"name"`
@@ -52,6 +55,8 @@ type TargetContainer struct {
 	Paths []string `json:"paths,omitempty"`
 	// +optional
 	Steps []Step `json:"steps,omitempty"`
+	// +kubebuilder:default:=/formol-shared
+	SharePath string `json:"sharePath"`
 }
 
 type Target struct {
