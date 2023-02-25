@@ -57,6 +57,8 @@ type TargetContainer struct {
 	Steps []Step `json:"steps,omitempty"`
 	// +kubebuilder:default:=/formol-shared
 	SharePath string `json:"sharePath"`
+	// +optional
+	Job []Step `json:"job,omitempty"`
 }
 
 type Target struct {
