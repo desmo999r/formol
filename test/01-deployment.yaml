@@ -84,9 +84,11 @@ spec:
               name: postgres-config-demo
         ports:
         - containerPort: 5432
-          name: postgredb
+          name: postgresdb
         volumeMounts:
-        - name: postgredb
+        - name: postgres-volume
           mountPath: /var/lib/postgresql/data
       volumes:
-      - name: postgredb
+      - name: postgres-volume
+        hostPath:
+          path: /data/postgresdb

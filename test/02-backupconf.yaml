@@ -1,5 +1,104 @@
 ---
 apiVersion: formol.desmojim.fr/v1alpha1
+kind: Repo
+metadata:
+  name: repo-local
+  namespace: demo
+spec:
+  backend:
+    local:
+      emptyDir:
+  repositorySecrets: secret-minio
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Repo
+metadata:
+  name: repo-minio
+  namespace: demo
+spec:
+  backend:
+    s3:
+      server: raid5.desmojim.fr:9000
+      bucket: testbucket2
+  repositorySecrets: secret-minio
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: restore-pg
+  namespace: demo
+spec:
+  name: restore-pg
+  image: desmo999r/formolcli:latest
+  args: ["postgres", "restore", "--hostname", $(PGHOST), "--database", $(PGDATABASE), "--username", $(PGUSER), "--password", $(PGPASSWD), "--file", "/output/backup-pg.sql"]
+  env:
+    - name: PGHOST
+      value: postgres
+    - name: PGDATABASE
+      value: demopostgres
+    - name: PGUSER
+      value: demopostgres
+    - name: PGPASSWD
+      value: password123!
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: with-envfrom
+  namespace: demo
+spec:
+  name: with-envfrom
+  command: ["touch", $(title)]
+  envFrom:
+    - secretRef:
+        name: with-envfrom-secret
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: with-env
+  namespace: demo
+spec:
+  name: with-env
+  command: ["touch", $(TESTFILE)]
+  env:
+    - name: TESTFILE
+      value: /data/testfile
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: backup-pg
+  namespace: demo
+spec:
+  name: backup-pg
+  command: ["pg_dump"]
+  args: ["--username", $(PGUSER), "--clean", "--if-exists", "--inserts", "--file", "/formol-shared/backup-pg.sql"]
+  env:
+    - name: PGUSER
+      value: demopostgres
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: maintenance-off
+  namespace: demo
+spec:
+  name: maintenance-off
+  command: ["/bin/sh"]
+  args: ["-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-off >> /data/logs.txt"]
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: maintenance-on
+  namespace: demo
+spec:
+  name: maintenance-on
+  command: ["/bin/sh"]
+  args: ["-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-on >> /data/logs.txt"]
+---
+apiVersion: formol.desmojim.fr/v1alpha1
 kind: BackupConfiguration
 metadata:
   name: backup-demo
@@ -32,6 +131,8 @@ spec:
     targetName: postgres-demo
     containers:
       - name: postgres
+        job:
+          - name: backup-pg
 #  - kind: Job
 #    name: backup-pg
 #    steps:
