@@ -265,6 +265,9 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 				},
 			}),
 		VolumeMounts: []corev1.VolumeMount{},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: func() *bool { b := true; return &b }(),
+		},
 	}
 	var targetObject client.Object
 	var targetPodSpec *corev1.PodSpec
