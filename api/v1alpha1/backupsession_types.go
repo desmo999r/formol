@@ -24,14 +24,15 @@ import (
 type SessionState string
 
 const (
-	New      SessionState = "New"
-	Init     SessionState = "Initializing"
-	Running  SessionState = "Running"
-	Waiting  SessionState = "Waiting"
-	Finalize SessionState = "Finalizing"
-	Success  SessionState = "Success"
-	Failure  SessionState = "Failure"
-	Deleted  SessionState = "Deleted"
+	New          SessionState = "New"
+	Initializing SessionState = "Initializing"
+	Initialized  SessionState = "Initialized"
+	Running      SessionState = "Running"
+	Waiting      SessionState = "Waiting"
+	Finalize     SessionState = "Finalize"
+	Success      SessionState = "Success"
+	Failure      SessionState = "Failure"
+	Deleted      SessionState = "Deleted"
 )
 
 type TargetStatus struct {

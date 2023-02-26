@@ -38,29 +38,67 @@ func (r *BackupSessionReconciler) isBackupOngoing(backupConf formolv1alpha1.Back
 	return len(backupSessionList.Items) > 0
 }
 
-func (r *BackupSessionReconciler) startNextTask(backupSession *formolv1alpha1.BackupSession, backupConf formolv1alpha1.BackupConfiguration) *formolv1alpha1.TargetStatus {
-	nextTargetIndex := len(backupSession.Status.Targets)
-	if nextTargetIndex < len(backupConf.Spec.Targets) {
-		nextTarget := backupConf.Spec.Targets[nextTargetIndex]
-		nextTargetStatus := formolv1alpha1.TargetStatus{
-			BackupType:   nextTarget.BackupType,
-			TargetName:   nextTarget.TargetName,
-			TargetKind:   nextTarget.TargetKind,
-			SessionState: formolv1alpha1.New,
+func (r *BackupSessionReconciler) initBackup(backupSession *formolv1alpha1.BackupSession, backupConf formolv1alpha1.BackupConfiguration) formolv1alpha1.SessionState {
+	for _, target := range backupConf.Spec.Targets {
+		r.Log.V(0).Info("Creating new target", "target", target.TargetName)
+		backupSession.Status.Targets = append(backupSession.Status.Targets, formolv1alpha1.TargetStatus{
+			BackupType:   target.BackupType,
+			TargetName:   target.TargetName,
+			TargetKind:   target.TargetKind,
+			SessionState: "",
 			StartTime:    &metav1.Time{Time: time.Now()},
 			Try:          1,
-		}
-		switch nextTarget.BackupType {
-		case formolv1alpha1.OnlineKind:
-			r.Log.V(0).Info("Starts a new OnlineKind task", "target", nextTarget)
-		case formolv1alpha1.JobKind:
-			r.Log.V(0).Info("Starts a new JobKind task", "target", nextTarget)
-		case formolv1alpha1.SnapshotKind:
-			r.Log.V(0).Info("Starts a new SnapshotKind task", "target", nextTarget)
-		}
-		backupSession.Status.Targets = append(backupSession.Status.Targets, nextTargetStatus)
-		return &nextTargetStatus
-	} else {
-		return nil
+		})
 	}
+	return formolv1alpha1.Initializing
+}
+
+func (r *BackupSessionReconciler) checkSessionState(
+	backupSession *formolv1alpha1.BackupSession,
+	backupConf formolv1alpha1.BackupConfiguration,
+	currentState formolv1alpha1.SessionState,
+	waitState formolv1alpha1.SessionState,
+	nextState formolv1alpha1.SessionState) formolv1alpha1.SessionState {
+	for i, targetStatus := range backupSession.Status.Targets {
+		r.Log.V(0).Info("Target status", "target", targetStatus.TargetName, "session state", targetStatus.SessionState)
+		switch targetStatus.SessionState {
+		case currentState:
+			r.Log.V(0).Info("Move target to waitState", "target", targetStatus.TargetName, "waitState", waitState)
+			backupSession.Status.Targets[i].SessionState = waitState
+			return waitState
+		case formolv1alpha1.Failure:
+			if targetStatus.Try < backupConf.Spec.Targets[i].Retry {
+				r.Log.V(0).Info("Target failed. Try one more time", "target", targetStatus.TargetName, "waitState", waitState)
+				backupSession.Status.Targets[i].SessionState = waitState
+				backupSession.Status.Targets[i].Try++
+				backupSession.Status.Targets[i].StartTime = &metav1.Time{Time: time.Now()}
+				return waitState
+			} else {
+				r.Log.V(0).Info("Target failed for the last time", "target", targetStatus.TargetName)
+				return formolv1alpha1.Failure
+			}
+		case waitState:
+			// target is still busy with its current state. Wait until it is done.
+			r.Log.V(0).Info("Waiting for one target to finish", "waitState", waitState)
+			return ""
+		default:
+			if i == len(backupSession.Status.Targets)-1 {
+				r.Log.V(0).Info("Moving to next state", "nextState", nextState)
+				return nextState
+			}
+		}
+	}
+	return ""
+}
+
+func (r *BackupSessionReconciler) checkInitialized(backupSession *formolv1alpha1.BackupSession, backupConf formolv1alpha1.BackupConfiguration) formolv1alpha1.SessionState {
+	return r.checkSessionState(backupSession, backupConf, "", formolv1alpha1.Initializing, formolv1alpha1.Running)
+}
+
+func (r *BackupSessionReconciler) checkWaiting(backupSession *formolv1alpha1.BackupSession, backupConf formolv1alpha1.BackupConfiguration) formolv1alpha1.SessionState {
+	return r.checkSessionState(backupSession, backupConf, formolv1alpha1.Initialized, formolv1alpha1.Running, formolv1alpha1.Finalize)
+}
+
+func (r *BackupSessionReconciler) checkSuccess(backupSession *formolv1alpha1.BackupSession, backupConf formolv1alpha1.BackupConfiguration) formolv1alpha1.SessionState {
+	return r.checkSessionState(backupSession, backupConf, formolv1alpha1.Waiting, formolv1alpha1.Finalize, formolv1alpha1.Success)
 }

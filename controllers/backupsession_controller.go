@@ -91,72 +91,49 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	var newSessionState formolv1alpha1.SessionState
 	switch backupSession.Status.SessionState {
 	case formolv1alpha1.New:
+		// Go through the Targets and create the corresponding TargetStatus. Move to Initializing.
 		if r.isBackupOngoing(backupConf) {
 			r.Log.V(0).Info("there is an ongoing backup. Let's reschedule this operation")
 			return ctrl.Result{
 				RequeueAfter: 30 * time.Second,
 			}, nil
 		}
-		if nextTargetStatus := r.startNextTask(&backupSession, backupConf); nextTargetStatus != nil {
-			r.Log.V(0).Info("New backup. Start the first task", "task", nextTargetStatus)
-			backupSession.Status.SessionState = formolv1alpha1.Running
-			if err := r.Status().Update(ctx, &backupSession); err != nil {
-				r.Log.Error(err, "unable to update BackupSession status")
-			}
-			return ctrl.Result{}, err
-		} else {
-			r.Log.V(0).Info("No first target? That should not happen. Mark the backup has failed")
-			backupSession.Status.SessionState = formolv1alpha1.Failure
-			if err := r.Status().Update(ctx, &backupSession); err != nil {
-				r.Log.Error(err, "unable to update BackupSession status")
-			}
-			return ctrl.Result{}, err
-		}
+		newSessionState = r.initBackup(&backupSession, backupConf)
+	case formolv1alpha1.Initializing:
+		// Wait for all the Targets to be in the Initialized state then move them to Running and move to Running myself.
+		// if one of the Target fails to initialize, move it back to New state and decrement Try.
+		// if try reaches 0, move all the Targets to Finalize and move myself to Failure.
+		newSessionState = r.checkInitialized(&backupSession, backupConf)
 	case formolv1alpha1.Running:
-		// Backup ongoing. Check the status of the last backup task and decide what to do next.
-		currentTargetStatus := &(backupSession.Status.Targets[len(backupSession.Status.Targets)-1])
-		switch currentTargetStatus.SessionState {
-		case formolv1alpha1.Running:
-			r.Log.V(0).Info("Current task is still running. Wait until it's finished")
-		case formolv1alpha1.Success:
-			r.Log.V(0).Info("Last backup task was a success. Start a new one")
-			if nextTargetStatus := r.startNextTask(&backupSession, backupConf); nextTargetStatus != nil {
-				r.Log.V(0).Info("Starting a new task", "task", nextTargetStatus)
-			} else {
-				r.Log.V(0).Info("No more tasks to start. The backup is a success. Let's do some cleanup")
-				backupSession.Status.SessionState = formolv1alpha1.Success
-			}
-			if err := r.Status().Update(ctx, &backupSession); err != nil {
-				r.Log.Error(err, "unable to update BackupSession")
-			}
-			return ctrl.Result{}, err
-		case formolv1alpha1.Failure:
-			// Last task failed. Try to run it again
-			if currentTargetStatus.Try < backupConf.Spec.Targets[len(backupSession.Status.Targets)-1].Retry {
-				r.Log.V(0).Info("Last task failed. Try to run it again")
-				currentTargetStatus.Try++
-				currentTargetStatus.SessionState = formolv1alpha1.New
-				currentTargetStatus.StartTime = &metav1.Time{Time: time.Now()}
-			} else {
-				r.Log.V(0).Info("Task failed again and for the last time")
-				backupSession.Status.SessionState = formolv1alpha1.Failure
-			}
-			if err := r.Status().Update(ctx, &backupSession); err != nil {
-				r.Log.Error(err, "unable to update BackupSession")
-			}
-			return ctrl.Result{}, err
+		// Wait for all the target to be in Waiting state then move them to the Finalize state. Move myself to Finalize.
+		// if one of the Target fails the backup, move it back to Running state and decrement Try.
+		// if try reaches 0, move all the Targets to Finalize and move myself to Failure.
+		newSessionState = r.checkWaiting(&backupSession, backupConf)
+	case formolv1alpha1.Finalize:
+		// Check the TargetStatus of all the Targets. If they are all Success then move myself to Success.
+		// if one of the Target fails to Finalize, move it back to Finalize state and decrement Try.
+		// if try reaches 0, move myself to Success because the backup was a Success even if the Finalize failed.
+		if newSessionState = r.checkSuccess(&backupSession, backupConf); newSessionState == formolv1alpha1.Failure {
+			r.Log.V(0).Info("One of the target did not manage to Finalize but the backup is still a Success")
+			newSessionState = formolv1alpha1.Success
 		}
+	case formolv1alpha1.Success:
+		r.Log.V(0).Info("Backup was a success")
 
 	case formolv1alpha1.Failure:
-		// Failed backup. Don't do anything anymore
-	case formolv1alpha1.Success:
-		// Backup was a success
+		r.Log.V(0).Info("Backup failed")
+
 	default:
 		// BackupSession has just been created
-		backupSession.Status.SessionState = formolv1alpha1.New
+		newSessionState = formolv1alpha1.New
 		backupSession.Status.StartTime = &metav1.Time{Time: time.Now()}
+	}
+	if newSessionState != "" {
+		r.Log.V(0).Info("BackupSession needs a status update", "newSessionState", newSessionState, "backupSession", backupSession)
+		backupSession.Status.SessionState = newSessionState
 		if err := r.Status().Update(ctx, &backupSession); err != nil {
 			r.Log.Error(err, "unable to update BackupSession.Status")
 			return ctrl.Result{}, err
