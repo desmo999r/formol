@@ -72,7 +72,7 @@ metadata:
   namespace: demo
 spec:
   name: backup-pg
-  command: ["pg_dump"]
+  command: ["pg_dumpall"]
   args: ["--username", $(PGUSER), "--clean", "--if-exists", "--inserts", "--file", "/formol-shared/backup-pg.sql"]
   env:
     - name: PGUSER
