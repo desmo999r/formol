@@ -379,12 +379,17 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch"},
 					APIGroups: []string{"formol.desmojim.fr"},
-					Resources: []string{"backupsessions", "backupconfigurations", "functions", "repos"},
+					Resources: []string{"restoresessions", "backupsessions", "backupconfigurations", "functions", "repos"},
 				},
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 					APIGroups: []string{"formol.desmojim.fr"},
 					Resources: []string{"backupsessions/status"},
+				},
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					APIGroups: []string{"formol.desmojim.fr"},
+					Resources: []string{"restoresessions/status"},
 				},
 			},
 		}

@@ -18,8 +18,8 @@ metadata:
 spec:
   backend:
     s3:
-      server: raid5.desmojim.fr:9000
-      bucket: testbucket2
+      server: minio-svc.minio:9000
+      bucket: backups
   repositorySecrets: secret-minio
 ---
 apiVersion: formol.desmojim.fr/v1alpha1
@@ -106,7 +106,7 @@ metadata:
 spec:
   suspend: true
   image: desmo999r/formolcli:latest
-  repository: repo-local
+  repository: repo-minio
   schedule: "15 * * * *"
   keep:
     last: 5
