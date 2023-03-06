@@ -253,12 +253,11 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 		return err
 	}
 	r.Log.V(1).Info("Got Repository", "repo", repo)
-	env := repo.GetResticEnv(backupConf)
 	sidecar := corev1.Container{
 		Name:  formolv1alpha1.SIDECARCONTAINER_NAME,
 		Image: backupConf.Spec.Image,
 		Args:  []string{"backupsession", "server"},
-		Env: append(env,
+		Env: []corev1.EnvVar{
 			corev1.EnvVar{
 				Name:  formolv1alpha1.TARGET_NAME,
 				Value: target.TargetName,
@@ -270,7 +269,7 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 						FieldPath: "metadata.namespace",
 					},
 				},
-			}),
+			}},
 		VolumeMounts: []corev1.VolumeMount{},
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: func() *bool { b := true; return &b }(),
@@ -379,7 +378,12 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch"},
 					APIGroups: []string{"formol.desmojim.fr"},
-					Resources: []string{"restoresessions", "backupsessions", "backupconfigurations", "functions", "repos"},
+					Resources: []string{"restoresessions", "backupsessions", "backupconfigurations", "functions", "repoes"},
+				},
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch"},
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
 				},
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},

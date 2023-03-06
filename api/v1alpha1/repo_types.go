@@ -17,10 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"strings"
 )
 
 const (
@@ -84,54 +82,4 @@ type RepoList struct {
 
 func init() {
 	SchemeBuilder.Register(&Repo{}, &RepoList{})
-}
-
-func (repo *Repo) GetResticEnv(backupConf BackupConfiguration) []corev1.EnvVar {
-	env := []corev1.EnvVar{}
-	if repo.Spec.Backend.S3 != nil {
-		url := fmt.Sprintf("s3:http://%s/%s/%s-%s",
-			repo.Spec.Backend.S3.Server,
-			repo.Spec.Backend.S3.Bucket,
-			strings.ToUpper(backupConf.Namespace),
-			strings.ToLower(backupConf.Name))
-		env = append(env, corev1.EnvVar{
-			Name:  RESTIC_REPOSITORY,
-			Value: url,
-		})
-		for _, key := range []string{
-			AWS_ACCESS_KEY_ID,
-			AWS_SECRET_ACCESS_KEY,
-		} {
-			env = append(env, corev1.EnvVar{
-				Name: key,
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: repo.Spec.RepositorySecrets,
-						},
-						Key: key,
-					},
-				},
-			})
-		}
-	}
-	if repo.Spec.Backend.Local != nil {
-		env = append(env, corev1.EnvVar{
-			Name:  RESTIC_REPOSITORY,
-			Value: RESTIC_REPO_PATH,
-		})
-	}
-	env = append(env, corev1.EnvVar{
-		Name: RESTIC_PASSWORD,
-		ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: repo.Spec.RepositorySecrets,
-				},
-				Key: RESTIC_PASSWORD,
-			},
-		},
-	})
-
-	return env
 }
