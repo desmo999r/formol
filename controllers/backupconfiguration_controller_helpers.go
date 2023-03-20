@@ -256,7 +256,7 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 	sidecar := corev1.Container{
 		Name:  formolv1alpha1.SIDECARCONTAINER_NAME,
 		Image: backupConf.Spec.Image,
-		Args:  []string{"backupsession", "server"},
+		Args:  []string{"server"},
 		Env: []corev1.EnvVar{
 			corev1.EnvVar{
 				Name:  formolv1alpha1.TARGET_NAME,

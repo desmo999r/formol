@@ -20,10 +20,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -39,10 +37,7 @@ const (
 
 // BackupSessionReconciler reconciles a BackupSession object
 type BackupSessionReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
-	Log    logr.Logger
-	context.Context
+	Session
 }
 
 //+kubebuilder:rbac:groups=formol.desmojim.fr,resources=backupsessions,verbs=get;list;watch;create;update;patch;delete
@@ -100,22 +95,23 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				RequeueAfter: 30 * time.Second,
 			}, nil
 		}
-		newSessionState = r.initBackup(&backupSession, backupConf)
+		backupSession.Status.Targets = r.initSession(backupConf)
+		newSessionState = formolv1alpha1.Initializing
 	case formolv1alpha1.Initializing:
 		// Wait for all the Targets to be in the Initialized state then move them to Running and move to Running myself.
 		// if one of the Target fails to initialize, move it back to New state and decrement Try.
 		// if try reaches 0, move all the Targets to Finalize and move myself to Failure.
-		newSessionState = r.checkInitialized(&backupSession, backupConf)
+		newSessionState = r.checkInitialized(backupSession.Status.Targets, backupConf)
 	case formolv1alpha1.Running:
 		// Wait for all the target to be in Waiting state then move them to the Finalize state. Move myself to Finalize.
 		// if one of the Target fails the backup, move it back to Running state and decrement Try.
 		// if try reaches 0, move all the Targets to Finalize and move myself to Failure.
-		newSessionState = r.checkWaiting(&backupSession, backupConf)
+		newSessionState = r.checkWaiting(backupSession.Status.Targets, backupConf)
 	case formolv1alpha1.Finalize:
 		// Check the TargetStatus of all the Targets. If they are all Success then move myself to Success.
 		// if one of the Target fails to Finalize, move it back to Finalize state and decrement Try.
 		// if try reaches 0, move myself to Success because the backup was a Success even if the Finalize failed.
-		if newSessionState = r.checkSuccess(&backupSession, backupConf); newSessionState == formolv1alpha1.Failure {
+		if newSessionState = r.checkSuccess(backupSession.Status.Targets, backupConf); newSessionState == formolv1alpha1.Failure {
 			r.Log.V(0).Info("One of the target did not manage to Finalize but the backup is still a Success")
 			newSessionState = formolv1alpha1.Success
 		}

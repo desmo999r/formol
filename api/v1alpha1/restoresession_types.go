@@ -20,22 +20,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type BackupSessionRef struct {
+	Spec   BackupSessionSpec   `json:"spec"`
+	Status BackupSessionStatus `json:"status"`
+}
 
 // RestoreSessionSpec defines the desired state of RestoreSession
 type RestoreSessionSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of RestoreSession. Edit restoresession_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	BackupSessionRef `json:"backupSessionRef"`
 }
 
 // RestoreSessionStatus defines the observed state of RestoreSession
 type RestoreSessionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	SessionState `json:"state,omitempty"`
+	StartTime    *metav1.Time   `json:"startTime,omitempty"`
+	Targets      []TargetStatus `json:"targets,omitempty"`
 }
 
 //+kubebuilder:object:root=true
