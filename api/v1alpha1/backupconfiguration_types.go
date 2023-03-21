@@ -17,7 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // +kubebuilder:validation:Enum=Deployment;StatefulSet;Pod
@@ -37,6 +40,22 @@ const (
 	OnlineKind   BackupType = "Online"
 	JobKind      BackupType = "Job"
 )
+
+func GetTargetObjects(kind TargetKind) (targetObject client.Object, targetPodSpec *corev1.PodSpec) {
+	switch kind {
+	case Deployment:
+		deployment := appsv1.Deployment{}
+		targetObject = &deployment
+		targetPodSpec = &deployment.Spec.Template.Spec
+
+	case StatefulSet:
+		statefulSet := appsv1.StatefulSet{}
+		targetObject = &statefulSet
+		targetPodSpec = &statefulSet.Spec.Template.Spec
+
+	}
+	return
+}
 
 const (
 	BACKUP_PREFIX_PATH   = `backup`

@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"fmt"
-	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -130,36 +129,6 @@ func (r *BackupConfigurationReconciler) AddCronJob(backupConf formolv1alpha1.Bac
 	}
 }
 
-func (r *BackupConfigurationReconciler) getTargetObjects(kind formolv1alpha1.TargetKind, namespace string, name string) (targetObject client.Object, targetPodSpec *corev1.PodSpec, err error) {
-	switch kind {
-	case formolv1alpha1.Deployment:
-		deployment := appsv1.Deployment{}
-		if err = r.Get(r.Context, client.ObjectKey{
-			Namespace: namespace,
-			Name:      name,
-		}, &deployment); err != nil {
-			r.Log.Error(err, "cannot get deployment", "Deployment", name)
-			return
-		}
-		targetObject = &deployment
-		targetPodSpec = &deployment.Spec.Template.Spec
-
-	case formolv1alpha1.StatefulSet:
-		statefulSet := appsv1.StatefulSet{}
-		if err = r.Get(r.Context, client.ObjectKey{
-			Namespace: namespace,
-			Name:      name,
-		}, &statefulSet); err != nil {
-			r.Log.Error(err, "cannot get StatefulSet", "StatefulSet", name)
-			return
-		}
-		targetObject = &statefulSet
-		targetPodSpec = &statefulSet.Spec.Template.Spec
-
-	}
-	return
-}
-
 func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.BackupConfiguration) error {
 	removeTags := func(podSpec *corev1.PodSpec, target formolv1alpha1.Target) {
 		for i, container := range podSpec.Containers {
@@ -190,9 +159,12 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 	}
 	r.Log.V(1).Info("Got Repository", "repo", repo)
 	for _, target := range backupConf.Spec.Targets {
-		targetObject, targetPodSpec, err := r.getTargetObjects(target.TargetKind, backupConf.Namespace, target.TargetName)
-		if err != nil {
-			r.Log.Error(err, "unable to get target objects")
+		targetObject, targetPodSpec := formolv1alpha1.GetTargetObjects(target.TargetKind)
+		if err := r.Get(r.Context, client.ObjectKey{
+			Namespace: backupConf.Namespace,
+			Name:      target.TargetName,
+		}, targetObject); err != nil {
+			r.Log.Error(err, "cannot get target", "target", target.TargetName)
 			return err
 		}
 		restoreContainers := []corev1.Container{}
@@ -225,7 +197,7 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 		}
 		targetPodSpec.Volumes = restoreVolumes
 		removeTags(targetPodSpec, target)
-		if err = r.Update(r.Context, targetObject); err != nil {
+		if err := r.Update(r.Context, targetObject); err != nil {
 			r.Log.Error(err, "unable to remove sidecar", "targetObject", targetObject)
 			return err
 		}
@@ -275,9 +247,12 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 			Privileged: func() *bool { b := true; return &b }(),
 		},
 	}
-	targetObject, targetPodSpec, err := r.getTargetObjects(target.TargetKind, backupConf.Namespace, target.TargetName)
-	if err != nil {
-		r.Log.Error(err, "unable to get target objects")
+	targetObject, targetPodSpec := formolv1alpha1.GetTargetObjects(target.TargetKind)
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: backupConf.Namespace,
+		Name:      target.TargetName,
+	}, targetObject); err != nil {
+		r.Log.Error(err, "cannot get target", "target", target.TargetName)
 		return err
 	}
 	if !hasSidecar(targetPodSpec) {
