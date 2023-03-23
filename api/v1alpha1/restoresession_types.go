@@ -27,7 +27,7 @@ type BackupSessionRef struct {
 
 // RestoreSessionSpec defines the desired state of RestoreSession
 type RestoreSessionSpec struct {
-	BackupSessionRef `json:"backupSessionRef"`
+	BackupSessionRef `json:"backupSession"`
 }
 
 // RestoreSessionStatus defines the observed state of RestoreSession

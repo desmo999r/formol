@@ -58,7 +58,7 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err := r.Get(r.Context, client.ObjectKey{
 		Namespace: backupSession.Spec.Ref.Namespace,
 		Name:      backupSession.Spec.Ref.Name,
-	}, &restoreSession); err != nil {
+	}, &backupConf); err != nil {
 		r.Log.Error(err, "unable to get BackupConfiguration")
 		return ctrl.Result{}, err
 	}

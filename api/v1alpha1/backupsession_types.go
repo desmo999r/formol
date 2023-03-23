@@ -40,10 +40,11 @@ type TargetStatus struct {
 	TargetName   string `json:"targetName"`
 	TargetKind   `json:"targetKind"`
 	SessionState `json:"state"`
-	SnapshotId   string           `json:"snapshotId"`
-	StartTime    *metav1.Time     `json:"startTime"`
-	Duration     *metav1.Duration `json:"duration,omitempty"`
-	Try          int              `json:"try"`
+	// +optional
+	SnapshotId string           `json:"snapshotId,omitempty"`
+	StartTime  *metav1.Time     `json:"startTime"`
+	Duration   *metav1.Duration `json:"duration,omitempty"`
+	Try        int              `json:"try"`
 }
 
 // BackupSessionSpec defines the desired state of BackupSession

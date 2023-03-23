@@ -1,6 +1,7 @@
 package v1alpha1
 
 const (
+	RESTORECONTAINER_NAME string = "formol-restore"
 	// the name of the sidecar container
 	SIDECARCONTAINER_NAME string = "formol"
 	// the name of the container we backup when there are more than 1 container in the pod

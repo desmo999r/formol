@@ -10,21 +10,24 @@ spec:
         name: backup-demo
         namespace: demo
     status:
-      keep: monthly
-      startTime: "2021-05-01T22:15:28Z"
+      keep: ""
+      startTime: "2023-03-20T20:47:08Z"
       state: Success
       target:
-      - duration: 17.952754232s
-        kind: Sidecar
-        name: nginx-deployment
-        snapshotId: f411315c
-        startTime: "2021-05-01T22:15:34Z"
+      - backupType: Online
+        duration: 3.189468146s
+        snapshotId: 4730eaad
+        startTime: "2023-03-20T20:47:08Z"
         state: Success
+        targetKind: Deployment
+        targetName: apache-deployment
         try: 1
-      - duration: 25.46747271s
-        kind: Job
-        name: backup-pg
-        snapshotId: ca673e5a
-        startTime: "2021-05-01T22:15:55Z"
+      - backupType: Job
+        duration: 7.509060051s
+        snapshotId: 4ddc5da1
+        startTime: "2023-03-20T20:47:08Z"
         state: Success
+        targetKind: StatefulSet
+        targetName: postgres-demo
         try: 1
+
