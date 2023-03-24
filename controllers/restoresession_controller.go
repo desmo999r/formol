@@ -92,6 +92,10 @@ func (r *RestoreSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			r.Log.V(0).Info("One of the target did not manage to Finalize but the backup is still a Success")
 			newSessionState = formolv1alpha1.Success
 		}
+	case formolv1alpha1.Success:
+		r.Log.V(0).Info("The restore was a success")
+	case formolv1alpha1.Failure:
+		r.Log.V(0).Info("The restore was a failure")
 	case "":
 		newSessionState = formolv1alpha1.New
 		restoreSession.Status.StartTime = &metav1.Time{Time: time.Now()}
