@@ -154,7 +154,7 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 		Namespace: backupConf.Namespace,
 		Name:      backupConf.Spec.Repository,
 	}, &repo); err != nil {
-		r.Log.Error(err, "unable to get Repo")
+		r.Log.Error(err, "unable to get Repo", "repo", backupConf.Spec.Repository)
 		return err
 	}
 	r.Log.V(1).Info("Got Repository", "repo", repo)
