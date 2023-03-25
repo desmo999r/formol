@@ -116,9 +116,8 @@ spec:
     containers:
       - name: apache
         steps:
-          - name: maintenance-on
-          - name: maintenance-off
-            finalize: true
+          - initialize: maintenance-on
+          - finalize: maintenance-off
         paths:
           - /data
   - backupType: Job
@@ -127,7 +126,8 @@ spec:
     containers:
       - name: postgres
         job:
-          - name: pg
+          - backup: backup-pg
+            restore: restore-pg
 #  - kind: Job
 #    name: backup-pg
 #    steps:

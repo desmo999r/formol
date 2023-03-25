@@ -63,9 +63,14 @@ const (
 )
 
 type Step struct {
-	Name string `json:"name"`
 	// +optional
-	Finalize *bool `json:"finalize"`
+	Finalize *string `json:"finalize,omitempty"`
+	// +optional
+	Initialize *string `json:"initialize,omitempty"`
+	// +optional
+	Backup *string `json:"backup,omitempty"`
+	// +optional
+	Restore *string `json:"restore,omitempty"`
 }
 
 type TargetContainer struct {

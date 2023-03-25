@@ -591,7 +591,22 @@ func (in *Step) DeepCopyInto(out *Step) {
 	*out = *in
 	if in.Finalize != nil {
 		in, out := &in.Finalize, &out.Finalize
-		*out = new(bool)
+		*out = new(string)
+		**out = **in
+	}
+	if in.Initialize != nil {
+		in, out := &in.Initialize, &out.Initialize
+		*out = new(string)
+		**out = **in
+	}
+	if in.Backup != nil {
+		in, out := &in.Backup, &out.Backup
+		*out = new(string)
+		**out = **in
+	}
+	if in.Restore != nil {
+		in, out := &in.Restore, &out.Restore
+		*out = new(string)
 		**out = **in
 	}
 }
