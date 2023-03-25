@@ -57,8 +57,21 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		return ctrl.Result{}, err
 	}
+	// we might need the BackupConfiguration is the BackupSession
+	// is being deleted
+	backupConf := formolv1alpha1.BackupConfiguration{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: backupSession.Spec.Ref.Namespace,
+		Name:      backupSession.Spec.Ref.Name,
+	}, &backupConf); err != nil {
+		r.Log.Error(err, "unable to get BackupConfiguration")
+		return ctrl.Result{}, err
+	}
 	if !backupSession.ObjectMeta.DeletionTimestamp.IsZero() {
 		r.Log.V(0).Info("BackupSession is being deleted")
+		if err := r.deleteSnapshots(backupSession, backupConf); err != nil {
+			r.Log.Error(err, "unable to delete the BackupSession snapshots")
+		}
 		if controllerutil.ContainsFinalizer(&backupSession, finalizerName) {
 			controllerutil.RemoveFinalizer(&backupSession, finalizerName)
 			err := r.Update(ctx, &backupSession)
@@ -74,14 +87,6 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if err != nil {
 			r.Log.Error(err, "unable to add finalizer")
 		}
-		return ctrl.Result{}, err
-	}
-	backupConf := formolv1alpha1.BackupConfiguration{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Namespace: backupSession.Spec.Ref.Namespace,
-		Name:      backupSession.Spec.Ref.Name,
-	}, &backupConf); err != nil {
-		r.Log.Error(err, "unable to get BackupConfiguration")
 		return ctrl.Result{}, err
 	}
 
@@ -116,6 +121,7 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			newSessionState = formolv1alpha1.Success
 		}
 	case formolv1alpha1.Success:
+		r.cleanupSessions(backupConf)
 		r.Log.V(0).Info("Backup was a success")
 
 	case formolv1alpha1.Failure:

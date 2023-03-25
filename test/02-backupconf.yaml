@@ -104,7 +104,7 @@ spec:
   repository: repo-minio
   schedule: "15 * * * *"
   keep:
-    last: 5
+    last: 2
     daily: 2
     weekly: 2
     monthly: 6
