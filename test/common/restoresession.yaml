@@ -10,22 +10,22 @@ spec:
         name: backup-demo
         namespace: demo
     status:
-      keep: ""
-      startTime: "2023-03-20T20:47:08Z"
+      keep: last
+      startTime: "2023-03-31T14:21:27Z"
       state: Success
       target:
       - backupType: Online
-        duration: 3.189468146s
-        snapshotId: 4730eaad
-        startTime: "2023-03-20T20:47:08Z"
+        duration: 1.734652641s
+        snapshotId: 1d2baf88
+        startTime: "2023-03-31T14:21:27Z"
         state: Success
         targetKind: Deployment
         targetName: apache-deployment
         try: 1
       - backupType: Job
-        duration: 7.509060051s
-        snapshotId: 4ddc5da1
-        startTime: "2023-03-20T20:47:08Z"
+        duration: 3.072021762s
+        snapshotId: 748622a4
+        startTime: "2023-03-31T14:21:27Z"
         state: Success
         targetKind: StatefulSet
         targetName: postgres-demo
