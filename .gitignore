@@ -28,3 +28,4 @@ config/crd/bases
 test/restic
 test/password
 testbin/*
+test/minikube/040-restoresession.yaml
