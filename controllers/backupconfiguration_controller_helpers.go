@@ -265,16 +265,29 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 			r.Log.Error(err, "unable to create RBAC for the sidecar container")
 			return
 		}
-		switch target.BackupType {
-		case formolv1alpha1.OnlineKind:
-			sidecarPaths, vms := addOnlineSidecarTags(targetPodSpec, target)
-			sidecar.Env = append(sidecar.Env, corev1.EnvVar{
-				Name:  formolv1alpha1.BACKUP_PATHS,
-				Value: strings.Join(sidecarPaths, string(os.PathListSeparator)),
-			})
-			sidecar.VolumeMounts = vms
-		case formolv1alpha1.JobKind:
-			sidecar.VolumeMounts = addJobSidecarTags(targetPodSpec, target)
+		for i, container := range targetPodSpec.Containers {
+			for _, targetContainer := range target.Containers {
+				if targetContainer.Name == container.Name {
+					// Found a target container. Tag it.
+					targetPodSpec.Containers[i].Env = append(container.Env, corev1.EnvVar{
+						Name:  formolv1alpha1.TARGETCONTAINER_TAG,
+						Value: container.Name,
+					})
+					switch target.BackupType {
+					case formolv1alpha1.OnlineKind:
+						sidecarPaths, vms := addOnlineSidecarTags(container, targetContainer)
+						sidecar.Env = append(sidecar.Env, corev1.EnvVar{
+							Name:  formolv1alpha1.BACKUP_PATHS,
+							Value: strings.Join(sidecarPaths, string(os.PathListSeparator)),
+						})
+						sidecar.VolumeMounts = vms
+					case formolv1alpha1.JobKind:
+						sidecar.VolumeMounts = addJobSidecarTags(targetPodSpec, i, targetContainer)
+					case formolv1alpha1.SnapshotKind:
+
+					}
+				}
+			}
 		}
 		if repo.Spec.Backend.Local != nil {
 			sidecar.VolumeMounts = append(sidecar.VolumeMounts, corev1.VolumeMount{
@@ -414,76 +427,54 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 	return nil
 }
 
-func addJobSidecarTags(podSpec *corev1.PodSpec, target formolv1alpha1.Target) (vms []corev1.VolumeMount) {
-	for i, container := range podSpec.Containers {
-		for _, targetContainer := range target.Containers {
-			if targetContainer.Name == container.Name {
-				// Found a target container. Tag it.
-				podSpec.Containers[i].Env = append(container.Env, corev1.EnvVar{
-					Name:  formolv1alpha1.TARGETCONTAINER_TAG,
-					Value: container.Name,
-				})
-				// Create a shared mount between the target and sidecar container
-				// the output of the Job will be saved in the shared volume
-				// and restic will then backup the content of the volume
-				var addSharedVol bool = true
-				for _, vol := range podSpec.Volumes {
-					if vol.Name == formolv1alpha1.FORMOL_SHARED_VOLUME {
-						addSharedVol = false
-					}
-				}
-				if addSharedVol {
-					podSpec.Volumes = append(podSpec.Volumes,
-						corev1.Volume{
-							Name:         formolv1alpha1.FORMOL_SHARED_VOLUME,
-							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-						})
-				}
-				podSpec.Containers[i].VolumeMounts = append(podSpec.Containers[i].VolumeMounts, corev1.VolumeMount{
-					Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
-					MountPath: targetContainer.SharePath,
-				})
-				vms = append(vms, corev1.VolumeMount{
-					Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
-					MountPath: targetContainer.SharePath,
-				})
-			}
+func addJobSidecarTags(podSpec *corev1.PodSpec, index int, targetContainer formolv1alpha1.TargetContainer) (vms []corev1.VolumeMount) {
+	// Create a shared mount between the target and sidecar container
+	// the output of the Job will be saved in the shared volume
+	// and restic will then backup the content of the volume
+	var addSharedVol bool = true
+	for _, vol := range podSpec.Volumes {
+		if vol.Name == formolv1alpha1.FORMOL_SHARED_VOLUME {
+			addSharedVol = false
 		}
 	}
+	if addSharedVol {
+		podSpec.Volumes = append(podSpec.Volumes,
+			corev1.Volume{
+				Name:         formolv1alpha1.FORMOL_SHARED_VOLUME,
+				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			})
+	}
+	podSpec.Containers[index].VolumeMounts = append(podSpec.Containers[index].VolumeMounts, corev1.VolumeMount{
+		Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
+		MountPath: targetContainer.SharePath,
+	})
+	vms = append(vms, corev1.VolumeMount{
+		Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
+		MountPath: targetContainer.SharePath,
+	})
 	return
 }
 
-func addOnlineSidecarTags(podSpec *corev1.PodSpec, target formolv1alpha1.Target) (sidecarPaths []string, vms []corev1.VolumeMount) {
-	for i, container := range podSpec.Containers {
-		for _, targetContainer := range target.Containers {
-			if targetContainer.Name == container.Name {
-				// Found a target container. Tag it.
-				podSpec.Containers[i].Env = append(container.Env, corev1.EnvVar{
-					Name:  formolv1alpha1.TARGETCONTAINER_TAG,
-					Value: container.Name,
-				})
-				// targetContainer.Paths are the paths to backup
-				// We have to find what volumes are mounted under those paths
-				// and mount them under a path that exists in the sidecar container
-				for i, path := range targetContainer.Paths {
-					vm := corev1.VolumeMount{ReadOnly: true}
-					var longest int = 0
-					var sidecarPath string
-					for _, volumeMount := range container.VolumeMounts {
-						// if strings.HasPrefix(path, volumeMount.MountPath) && len(volumeMount.MountPath) > longest {
-						if rel, err := filepath.Rel(volumeMount.MountPath, path); err == nil && len(volumeMount.MountPath) > longest {
-							longest = len(volumeMount.MountPath)
-							vm.Name = volumeMount.Name
-							vm.MountPath = fmt.Sprintf("/%s%d", formolv1alpha1.BACKUP_PREFIX_PATH, i)
-							vm.SubPath = volumeMount.SubPath
-							sidecarPath = filepath.Join(vm.MountPath, rel)
-						}
-					}
-					vms = append(vms, vm)
-					sidecarPaths = append(sidecarPaths, sidecarPath)
-				}
+func addOnlineSidecarTags(container corev1.Container, targetContainer formolv1alpha1.TargetContainer) (sidecarPaths []string, vms []corev1.VolumeMount) {
+	// targetContainer.Paths are the paths to backup
+	// We have to find what volumes are mounted under those paths
+	// and mount them under a path that exists in the sidecar container
+	for i, path := range targetContainer.Paths {
+		vm := corev1.VolumeMount{ReadOnly: true}
+		var longest int = 0
+		var sidecarPath string
+		for _, volumeMount := range container.VolumeMounts {
+			// if strings.HasPrefix(path, volumeMount.MountPath) && len(volumeMount.MountPath) > longest {
+			if rel, err := filepath.Rel(volumeMount.MountPath, path); err == nil && len(volumeMount.MountPath) > longest {
+				longest = len(volumeMount.MountPath)
+				vm.Name = volumeMount.Name
+				vm.MountPath = fmt.Sprintf("/%s%d", formolv1alpha1.BACKUP_PREFIX_PATH, i)
+				vm.SubPath = volumeMount.SubPath
+				sidecarPath = filepath.Join(vm.MountPath, rel)
 			}
 		}
+		vms = append(vms, vm)
+		sidecarPaths = append(sidecarPaths, sidecarPath)
 	}
 	return
 }
