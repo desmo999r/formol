@@ -1,0 +1,134 @@
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Repo
+metadata:
+  name: repo-local
+  namespace: demo
+spec:
+  backend:
+    local:
+      emptyDir:
+  repositorySecrets: secret-minio
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Repo
+metadata:
+  name: repo-minio
+  namespace: demo
+spec:
+  backend:
+    s3:
+      server: minio-svc.minio:9000
+      bucket: backups
+  repositorySecrets: secret-minio
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: with-envfrom
+  namespace: demo
+spec:
+  name: with-envfrom
+  command: ["touch", $(title)]
+  envFrom:
+    - secretRef:
+        name: with-envfrom-secret
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: with-env
+  namespace: demo
+spec:
+  name: with-env
+  command: ["touch", $(TESTFILE)]
+  env:
+    - name: TESTFILE
+      value: /data/testfile
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: backup-pg
+  namespace: demo
+spec:
+  name: backup-pg
+  command: ["pg_dumpall"]
+  args: ["--username", $(PGUSER), "--clean", "--if-exists", "--inserts", "--file", "/formol-shared/backup-pg.sql"]
+  env:
+    - name: PGUSER
+      value: demopostgres
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: restore-pg
+  namespace: demo
+spec:
+  name: restore-pg
+  image: desmo999r/formolcli:latest
+  command: ["psql"]
+  args: ["--username", $(PGUSER), "--quiet", "--file", "/formol-shared/backup-pg.sql", "postgres"]
+  env:
+    - name: PGUSER
+      value: demopostgres
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: maintenance-off
+  namespace: demo
+spec:
+  name: maintenance-off
+  command: ["/bin/sh"]
+  args: ["-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-off >> /data/logs.txt"]
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: Function
+metadata:
+  name: maintenance-on
+  namespace: demo
+spec:
+  name: maintenance-on
+  command: ["/bin/sh"]
+  args: ["-c", "echo $(date +%Y/%m/%d-%H:%M:%S) maintenance-on >> /data/logs.txt"]
+---
+apiVersion: formol.desmojim.fr/v1alpha1
+kind: BackupConfiguration
+metadata:
+  name: backup-demo
+  namespace: demo
+spec:
+  suspend: true
+  image: desmo999r/formolcli:latest
+  repository: repo-minio
+  schedule: "15 * * * *"
+  keep:
+    last: 2
+    daily: 2
+    weekly: 2
+    monthly: 6
+    yearly: 3
+  targets:
+  - backupType: Snapshot
+    targetKind: Deployment
+    targetName: apache-deployment
+    containers:
+      - name: apache
+        steps:
+          - initialize: maintenance-on
+          - finalize: maintenance-off
+        paths:
+          - /data
+  - backupType: Job
+    targetKind: StatefulSet
+    targetName: postgres-demo
+    containers:
+      - name: postgres
+        job:
+          - backup: backup-pg
+            restore: restore-pg
+#  - kind: Job
+#    name: backup-pg
+#    steps:
+#      - name: backup-pg
