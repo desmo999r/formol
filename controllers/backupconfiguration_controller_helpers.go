@@ -366,7 +366,7 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 			},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1.PolicyRule{
-					Verbs:     []string{"get", "list", "update"},
+					Verbs:     []string{"get", "list", "watch", "update"},
 					APIGroups: []string{"apps"},
 					Resources: []string{"deployments"},
 				},
