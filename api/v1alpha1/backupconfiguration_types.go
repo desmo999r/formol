@@ -92,6 +92,8 @@ type Target struct {
 	Containers []TargetContainer `json:"containers"`
 	// +kubebuilder:default:=2
 	Retry int `json:"retry"`
+	// +optional
+	VolumeSnapshotClass string `json:"volumeSnapshotClass,omitempty"`
 }
 
 type Keep struct {

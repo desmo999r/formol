@@ -17,14 +17,12 @@ limitations under the License.
 package controllers
 
 import (
-	"fmt"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
-	"path/filepath"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
@@ -33,8 +31,9 @@ import (
 )
 
 const (
-	FORMOL_SA           = "formol-controller"
-	FORMOL_SIDECAR_ROLE = "formol:sidecar-role"
+	FORMOL_SA                  = "formol-controller"
+	FORMOL_SIDECAR_ROLE        = "formol:sidecar-role"
+	FORMOL_SIDECAR_CLUSTERROLE = "formol:sidecar-clusterrole"
 )
 
 func (r *BackupConfigurationReconciler) DeleteCronJob(backupConf formolv1alpha1.BackupConfiguration) error {
@@ -225,28 +224,7 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 		return err
 	}
 	r.Log.V(1).Info("Got Repository", "repo", repo)
-	sidecar := corev1.Container{
-		Name:  formolv1alpha1.SIDECARCONTAINER_NAME,
-		Image: backupConf.Spec.Image,
-		Args:  []string{"server"},
-		Env: []corev1.EnvVar{
-			corev1.EnvVar{
-				Name:  formolv1alpha1.TARGET_NAME,
-				Value: target.TargetName,
-			},
-			corev1.EnvVar{
-				Name: formolv1alpha1.POD_NAMESPACE,
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.namespace",
-					},
-				},
-			}},
-		VolumeMounts: []corev1.VolumeMount{},
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: func() *bool { b := true; return &b }(),
-		},
-	}
+	sidecar := formolv1alpha1.GetSidecar(backupConf, target)
 	targetObject, targetPodSpec := formolv1alpha1.GetTargetObjects(target.TargetKind)
 	if err := r.Get(r.Context, client.ObjectKey{
 		Namespace: backupConf.Namespace,
@@ -275,16 +253,14 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 					})
 					switch target.BackupType {
 					case formolv1alpha1.OnlineKind:
-						sidecarPaths, vms := addOnlineSidecarTags(container, targetContainer)
+						sidecarPaths, vms := formolv1alpha1.GetVolumeMounts(container, targetContainer)
 						sidecar.Env = append(sidecar.Env, corev1.EnvVar{
 							Name:  formolv1alpha1.BACKUP_PATHS,
 							Value: strings.Join(sidecarPaths, string(os.PathListSeparator)),
 						})
 						sidecar.VolumeMounts = vms
 					case formolv1alpha1.JobKind:
-						sidecar.VolumeMounts = addJobSidecarTags(targetPodSpec, i, targetContainer)
-					case formolv1alpha1.SnapshotKind:
-
+						sidecar.VolumeMounts = formolv1alpha1.GetSharedPath(targetPodSpec, i, targetContainer)
 					}
 				}
 			}
@@ -333,6 +309,15 @@ func (r *BackupConfigurationReconciler) deleteRBACSidecar(namespace string) erro
 			}
 		}
 	}
+	roleBinding := rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      FORMOL_SIDECAR_ROLE,
+		},
+	}
+	if err := r.Delete(r.Context, &roleBinding); err != nil {
+		r.Log.Error(err, "unable to delete sidecar role binding")
+	}
 	role := rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
@@ -341,7 +326,24 @@ func (r *BackupConfigurationReconciler) deleteRBACSidecar(namespace string) erro
 	}
 	if err := r.Delete(r.Context, &role); err != nil {
 		r.Log.Error(err, "unable to delete sidecar role")
-		return err
+	}
+	clusterRoleBinding := rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      FORMOL_SIDECAR_CLUSTERROLE,
+		},
+	}
+	if err := r.Delete(r.Context, &clusterRoleBinding); err != nil {
+		r.Log.Error(err, "unable to delete sidecar clusterRole binding")
+	}
+	clusterRole := rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      FORMOL_SIDECAR_CLUSTERROLE,
+		},
+	}
+	if err := r.Delete(r.Context, &clusterRole); err != nil {
+		r.Log.Error(err, "unable to delete sidecar clusterRole")
 	}
 	return nil
 }
@@ -376,7 +378,7 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch"},
 					APIGroups: []string{""},
-					Resources: []string{"secrets"},
+					Resources: []string{"secrets", "persistentvolumeclaims"},
 				},
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
@@ -424,57 +426,60 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 			return err
 		}
 	}
+	clusterRole := rbacv1.ClusterRole{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Name: FORMOL_SIDECAR_CLUSTERROLE,
+	}, &clusterRole); err != nil && errors.IsNotFound(err) {
+		clusterRole = rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: FORMOL_SIDECAR_CLUSTERROLE,
+			},
+			Rules: []rbacv1.PolicyRule{
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch"},
+					APIGroups: []string{"", "snapshot.storage.k8s.io"},
+					Resources: []string{"volumesnapshotclasses", "persistentvolumes"},
+				},
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					APIGroups: []string{"snapshot.storage.k8s.io"},
+					Resources: []string{"volumesnapshots"},
+				},
+			},
+		}
+		r.Log.V(0).Info("Creating formol sidecar cluster role", "clusterRole", clusterRole)
+		if err = r.Create(r.Context, &clusterRole); err != nil {
+			r.Log.Error(err, "unable to create sidecar cluster role")
+			return err
+		}
+	}
+	clusterRolebinding := rbacv1.ClusterRoleBinding{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: sa.Namespace,
+		Name:      FORMOL_SIDECAR_CLUSTERROLE,
+	}, &clusterRolebinding); err != nil && errors.IsNotFound(err) {
+		clusterRolebinding = rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: FORMOL_SIDECAR_CLUSTERROLE,
+			},
+			Subjects: []rbacv1.Subject{
+				rbacv1.Subject{
+					Kind:      "ServiceAccount",
+					Name:      sa.Name,
+					Namespace: sa.Namespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     FORMOL_SIDECAR_CLUSTERROLE,
+			},
+		}
+		r.Log.V(0).Info("Creating formol sidecar clusterrolebinding", "clusterrolebinding", clusterRolebinding)
+		if err = r.Create(r.Context, &clusterRolebinding); err != nil {
+			r.Log.Error(err, "unable to create sidecar cluster rolebinding")
+			return err
+		}
+	}
 	return nil
-}
-
-func addJobSidecarTags(podSpec *corev1.PodSpec, index int, targetContainer formolv1alpha1.TargetContainer) (vms []corev1.VolumeMount) {
-	// Create a shared mount between the target and sidecar container
-	// the output of the Job will be saved in the shared volume
-	// and restic will then backup the content of the volume
-	var addSharedVol bool = true
-	for _, vol := range podSpec.Volumes {
-		if vol.Name == formolv1alpha1.FORMOL_SHARED_VOLUME {
-			addSharedVol = false
-		}
-	}
-	if addSharedVol {
-		podSpec.Volumes = append(podSpec.Volumes,
-			corev1.Volume{
-				Name:         formolv1alpha1.FORMOL_SHARED_VOLUME,
-				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-			})
-	}
-	podSpec.Containers[index].VolumeMounts = append(podSpec.Containers[index].VolumeMounts, corev1.VolumeMount{
-		Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
-		MountPath: targetContainer.SharePath,
-	})
-	vms = append(vms, corev1.VolumeMount{
-		Name:      formolv1alpha1.FORMOL_SHARED_VOLUME,
-		MountPath: targetContainer.SharePath,
-	})
-	return
-}
-
-func addOnlineSidecarTags(container corev1.Container, targetContainer formolv1alpha1.TargetContainer) (sidecarPaths []string, vms []corev1.VolumeMount) {
-	// targetContainer.Paths are the paths to backup
-	// We have to find what volumes are mounted under those paths
-	// and mount them under a path that exists in the sidecar container
-	for i, path := range targetContainer.Paths {
-		vm := corev1.VolumeMount{ReadOnly: true}
-		var longest int = 0
-		var sidecarPath string
-		for _, volumeMount := range container.VolumeMounts {
-			// if strings.HasPrefix(path, volumeMount.MountPath) && len(volumeMount.MountPath) > longest {
-			if rel, err := filepath.Rel(volumeMount.MountPath, path); err == nil && len(volumeMount.MountPath) > longest {
-				longest = len(volumeMount.MountPath)
-				vm.Name = volumeMount.Name
-				vm.MountPath = fmt.Sprintf("/%s%d", formolv1alpha1.BACKUP_PREFIX_PATH, i)
-				vm.SubPath = volumeMount.SubPath
-				sidecarPath = filepath.Join(vm.MountPath, rel)
-			}
-		}
-		vms = append(vms, vm)
-		sidecarPaths = append(sidecarPaths, sidecarPath)
-	}
-	return
 }
