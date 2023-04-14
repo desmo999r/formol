@@ -54,7 +54,7 @@ func (s Session) checkSessionState(
 	backupConf formolv1alpha1.BackupConfiguration,
 	currentState formolv1alpha1.SessionState,
 	waitState formolv1alpha1.SessionState,
-	nextState formolv1alpha1.SessionState) formolv1alpha1.SessionState {
+	nextState formolv1alpha1.SessionState) (sessionState formolv1alpha1.SessionState) {
 	for i, targetStatus := range tss {
 		s.Log.V(0).Info("Target status", "target", targetStatus.TargetName, "session state", targetStatus.SessionState)
 		switch targetStatus.SessionState {
@@ -77,6 +77,14 @@ func (s Session) checkSessionState(
 			// target is still busy with its current state. Wait until it is done.
 			s.Log.V(0).Info("Waiting for one target to finish", "waitState", waitState)
 			return ""
+		case formolv1alpha1.WaitingForJob:
+			// SnapshotKind special case
+			// A Job is scheduled to do the backup from a Volume Snapshot. It might take some time.
+			// We still want to run Finalize for all the targets (continue)
+			// but we also don't want to move the global BackupSession to Success (rewrite sessionState)
+			// When the Job is over, it will move the target state to Finalized and we'll be fine
+			defer func() { sessionState = "" }()
+			continue
 		default:
 			if i == len(tss)-1 {
 				s.Log.V(0).Info("Moving to next state", "nextState", nextState)
