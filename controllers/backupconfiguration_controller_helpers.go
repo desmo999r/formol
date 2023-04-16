@@ -376,9 +376,14 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 					Resources: []string{"restoresessions", "backupsessions", "backupconfigurations", "functions", "repoes"},
 				},
 				rbacv1.PolicyRule{
-					Verbs:     []string{"get", "list", "watch"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 					APIGroups: []string{""},
 					Resources: []string{"secrets", "persistentvolumeclaims"},
+				},
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					APIGroups: []string{"batch"},
+					Resources: []string{"jobs"},
 				},
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
