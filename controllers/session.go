@@ -83,7 +83,7 @@ func (s Session) checkSessionState(
 			// We still want to run Finalize for all the targets (continue)
 			// but we also don't want to move the global BackupSession to Success (rewrite sessionState)
 			// When the Job is over, it will move the target state to Finalized and we'll be fine
-			defer func() { sessionState = "" }()
+			defer func() { sessionState = waitState }()
 			continue
 		default:
 			if i == len(tss)-1 {
