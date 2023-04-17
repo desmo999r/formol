@@ -84,7 +84,7 @@ docker-build-multiarch:
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	buildah manifest psuh --all --rm $(MANIFEST) "docker://$(IMG)"
+	buildah manifest push --all --rm $(MANIFEST) "docker://$(IMG)"
 	#docker push ${IMG}
 
 # PLATFORMS defines the target platforms for  the manager image be build to provide support to multiple
