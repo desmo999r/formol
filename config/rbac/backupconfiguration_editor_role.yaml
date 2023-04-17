@@ -1,0 +1,31 @@
+# permissions for end users to edit backupconfigurations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: backupconfiguration-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: formol
+    app.kubernetes.io/part-of: formol
+    app.kubernetes.io/managed-by: kustomize
+  name: backupconfiguration-editor-role
+rules:
+- apiGroups:
+  - formol.desmojim.fr
+  resources:
+  - backupconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - formol.desmojim.fr
+  resources:
+  - backupconfigurations/status
+  verbs:
+  - get

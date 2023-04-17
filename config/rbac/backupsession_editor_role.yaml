@@ -1,0 +1,31 @@
+# permissions for end users to edit backupsessions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: backupsession-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: formol
+    app.kubernetes.io/part-of: formol
+    app.kubernetes.io/managed-by: kustomize
+  name: backupsession-editor-role
+rules:
+- apiGroups:
+  - formol.desmojim.fr
+  resources:
+  - backupsessions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - formol.desmojim.fr
+  resources:
+  - backupsessions/status
+  verbs:
+  - get
