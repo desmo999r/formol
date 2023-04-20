@@ -3,7 +3,9 @@ package v1alpha1
 import (
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
+	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -57,14 +59,19 @@ func GetVolumeMounts(container corev1.Container, targetContainer TargetContainer
 		vm := corev1.VolumeMount{ReadOnly: true}
 		var longest int = 0
 		var sidecarPath string
+		path = filepath.Clean(path)
+		splitPath := strings.Split(path, string(os.PathSeparator))
 		for _, volumeMount := range container.VolumeMounts {
-			// if strings.HasPrefix(path, volumeMount.MountPath) && len(volumeMount.MountPath) > longest {
-			if rel, err := filepath.Rel(volumeMount.MountPath, path); err == nil && len(volumeMount.MountPath) > longest {
-				longest = len(volumeMount.MountPath)
-				vm.Name = volumeMount.Name
-				vm.MountPath = fmt.Sprintf("/%s%d", BACKUP_PREFIX_PATH, i)
-				vm.SubPath = volumeMount.SubPath
-				sidecarPath = filepath.Join(vm.MountPath, rel)
+			splitMountPath := strings.Split(volumeMount.MountPath, string(os.PathSeparator))
+			for j, pathItem := range splitMountPath {
+				if j < len(splitPath) && pathItem == splitPath[j] && j > longest {
+					longest = j
+					vm.Name = volumeMount.Name
+					vm.MountPath = fmt.Sprintf("/%s%d", BACKUP_PREFIX_PATH, i)
+					vm.SubPath = volumeMount.SubPath
+					rel, _ := filepath.Rel(volumeMount.MountPath, path)
+					sidecarPath = filepath.Join(vm.MountPath, rel)
+				}
 			}
 		}
 		vms = append(vms, vm)
