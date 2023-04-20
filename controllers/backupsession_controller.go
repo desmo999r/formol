@@ -62,7 +62,9 @@ func (r *BackupSessionReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		Namespace: backupSession.Spec.Ref.Namespace,
 		Name:      backupSession.Spec.Ref.Name,
 	}, &backupConf); err != nil {
-		r.Log.Error(err, "unable to get BackupConfiguration")
+		if !errors.IsNotFound(err) {
+			r.Log.Error(err, "unable to get BackupConfiguration")
+		}
 		return ctrl.Result{}, err
 	}
 	if !backupSession.ObjectMeta.DeletionTimestamp.IsZero() {
