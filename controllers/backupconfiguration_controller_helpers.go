@@ -445,7 +445,7 @@ func (r *BackupConfigurationReconciler) createSidecarRBAC(podSpec *corev1.PodSpe
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 					APIGroups: []string{""},
-					Resources: []string{"secrets", "persistentvolumeclaims"},
+					Resources: []string{"secrets", "persistentvolumeclaims", "configmaps"},
 				},
 				rbacv1.PolicyRule{
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
