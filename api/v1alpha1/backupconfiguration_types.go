@@ -79,6 +79,7 @@ type TargetContainer struct {
 	Paths []string `json:"paths,omitempty"`
 	// +optional
 	Steps []Step `json:"steps,omitempty"`
+	// +optional
 	// +kubebuilder:default:=/formol-shared
 	SharePath string `json:"sharePath"`
 	// +optional
@@ -90,6 +91,7 @@ type Target struct {
 	TargetKind `json:"targetKind"`
 	TargetName string            `json:"targetName"`
 	Containers []TargetContainer `json:"containers"`
+	// +optional
 	// +kubebuilder:default:=2
 	Retry int `json:"retry"`
 	// +optional
