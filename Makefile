@@ -80,7 +80,7 @@ docker-build: test ## Build docker image with the manager.
 
 .PHONY: docker-build-multiarch
 docker-build-multiarch:
-	buildah bud --manifest $(MANIFEST) --platform=$(PLATFORMS) Dockerfile.multi
+	buildah bud --manifest $(MANIFEST) --platform=$(PLATFORMS) --layers Dockerfile.multi
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
