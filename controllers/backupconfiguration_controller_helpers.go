@@ -290,7 +290,7 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 
 // Delete the sidecar role is there is no more sidecar container in the namespace
 func (r *BackupConfigurationReconciler) deleteRBAC() error {
-	for _, roleBindingName := range []string{FORMOL_BS_CREATOR_ROLEBINDING, FORMOL_SIDECAR_CLUSTERROLEBINDING} {
+	for _, roleBindingName := range []string{FORMOL_BS_CREATOR_ROLEBINDING, FORMOL_SIDECAR_ROLEBINDING} {
 		roleBinding := rbacv1.RoleBinding{}
 		if err := r.Get(r.Context, client.ObjectKey{
 			Namespace: r.Namespace,
@@ -301,7 +301,7 @@ func (r *BackupConfigurationReconciler) deleteRBAC() error {
 			}
 		}
 	}
-	for _, roleName := range []string{FORMOL_BS_CREATOR_ROLE, FORMOL_SIDECAR_CLUSTERROLE} {
+	for _, roleName := range []string{FORMOL_BS_CREATOR_ROLE, FORMOL_SIDECAR_ROLE} {
 		role := rbacv1.Role{}
 		if err := r.Get(r.Context, client.ObjectKey{
 			Namespace: r.Namespace,
