@@ -36,6 +36,9 @@ type BackupConfigurationReconciler struct {
 	Scheme *runtime.Scheme
 	Log    logr.Logger
 	context.Context
+	Name       string
+	Namespace  string
+	backupConf formolv1alpha1.BackupConfiguration
 }
 
 //+kubebuilder:rbac:groups=formol.desmojim.fr,resources=*,verbs=*
@@ -63,6 +66,8 @@ type BackupConfigurationReconciler struct {
 func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.Context = ctx
 	r.Log = log.FromContext(ctx)
+	r.Name = req.NamespacedName.Name
+	r.Namespace = req.NamespacedName.Namespace
 
 	r.Log.V(1).Info("Enter Reconcile with req", "req", req, "reconciler", r)
 
@@ -74,6 +79,7 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		return ctrl.Result{}, err
 	}
+	r.backupConf = backupConf
 
 	finalizerName := "finalizer.backupconfiguration.formol.desmojim.fr"
 
@@ -82,7 +88,7 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 		if controllerutil.ContainsFinalizer(&backupConf, finalizerName) {
 			_ = r.DeleteSidecar(backupConf)
 			_ = r.DeleteCronJob(backupConf)
-			_ = r.deleteRBACSidecar(backupConf.Namespace)
+			_ = r.deleteRBAC()
 			controllerutil.RemoveFinalizer(&backupConf, finalizerName)
 			if err := r.Update(ctx, &backupConf); err != nil {
 				r.Log.Error(err, "unable to remove finalizer")
@@ -110,6 +116,10 @@ func (r *BackupConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	} else {
 		backupConf.Status.ActiveCronJob = true
+	}
+	if err = r.createBSCreatorRBAC(); err != nil {
+		r.Log.Error(err, "unable to create RBAC for the sidecar container")
+		return ctrl.Result{}, err
 	}
 
 	for _, target := range backupConf.Spec.Targets {

@@ -31,9 +31,13 @@ import (
 )
 
 const (
-	FORMOL_SA                  = "formol-controller"
-	FORMOL_SIDECAR_ROLE        = "formol:sidecar-role"
-	FORMOL_SIDECAR_CLUSTERROLE = "formol:sidecar-clusterrole"
+	FORMOL_BS_CREATOR_SA              = "bs-creator"
+	FORMOL_BS_CREATOR_ROLE            = "formol:bs-creator-role"
+	FORMOL_BS_CREATOR_ROLEBINDING     = "formol:bs-creator-rolebinding"
+	FORMOL_SIDECAR_ROLE               = "formol:sidecar-role"
+	FORMOL_SIDECAR_ROLEBINDING        = "formol:sidecar-rolebinding"
+	FORMOL_SIDECAR_CLUSTERROLE        = "formol:sidecar-clusterrole"
+	FORMOL_SIDECAR_CLUSTERROLEBINDING = "formol:sidecar-clusterrolebinding"
 )
 
 func (r *BackupConfigurationReconciler) DeleteCronJob(backupConf formolv1alpha1.BackupConfiguration) error {
@@ -93,7 +97,7 @@ func (r *BackupConfigurationReconciler) AddCronJob(backupConf formolv1alpha1.Bac
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
-							ServiceAccountName: "backupsession-creator",
+							ServiceAccountName: FORMOL_BS_CREATOR_SA,
 							Containers: []corev1.Container{
 								corev1.Container{
 									Name:  "job-createbackupsession-" + backupConf.Name,
@@ -234,12 +238,7 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 		return err
 	}
 	if !hasSidecar(targetPodSpec) {
-		if err = r.createRBACSidecar(corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: backupConf.Namespace,
-				Name:      targetPodSpec.ServiceAccountName,
-			},
-		}); err != nil {
+		if err = r.createSidecarRBAC(targetPodSpec); err != nil {
 			r.Log.Error(err, "unable to create RBAC for the sidecar container")
 			return
 		}
@@ -290,78 +289,146 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 }
 
 // Delete the sidecar role is there is no more sidecar container in the namespace
-func (r *BackupConfigurationReconciler) deleteRBACSidecar(namespace string) error {
-	podList := corev1.PodList{}
-	if err := r.List(r.Context, &podList, &client.ListOptions{
-		Namespace: namespace,
-	}); err != nil {
-		r.Log.Error(err, "unable to get the list of pods", "namespace", namespace)
-		return err
-	}
-	for _, pod := range podList.Items {
-		for _, container := range pod.Spec.Containers {
-			for _, env := range container.Env {
-				if env.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
-					// There is still a sidecar in the namespace.
-					// cannot delete the sidecar role
-					return nil
-				}
+func (r *BackupConfigurationReconciler) deleteRBAC() error {
+	for _, roleBindingName := range []string{FORMOL_BS_CREATOR_ROLEBINDING, FORMOL_SIDECAR_CLUSTERROLEBINDING} {
+		roleBinding := rbacv1.RoleBinding{}
+		if err := r.Get(r.Context, client.ObjectKey{
+			Namespace: r.Namespace,
+			Name:      roleBindingName,
+		}, &roleBinding); err == nil {
+			if err = r.Delete(r.Context, &roleBinding); err != nil {
+				r.Log.Error(err, "unable to delete role binding", "role binding", roleBindingName)
 			}
 		}
 	}
-	roleBinding := rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      FORMOL_SIDECAR_ROLE,
-		},
+	for _, roleName := range []string{FORMOL_BS_CREATOR_ROLE, FORMOL_SIDECAR_CLUSTERROLE} {
+		role := rbacv1.Role{}
+		if err := r.Get(r.Context, client.ObjectKey{
+			Namespace: r.Namespace,
+			Name:      roleName,
+		}, &role); err == nil {
+			if err = r.Delete(r.Context, &role); err != nil {
+				r.Log.Error(err, "unable to delete role", "role", roleName)
+			}
+		}
 	}
-	if err := r.Delete(r.Context, &roleBinding); err != nil {
-		r.Log.Error(err, "unable to delete sidecar role binding")
+	sa := corev1.ServiceAccount{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: r.Namespace,
+		Name:      FORMOL_BS_CREATOR_SA,
+	}, &sa); err == nil {
+		if err = r.Delete(r.Context, &sa); err != nil {
+			r.Log.Error(err, "unable to delete bs service account role")
+		}
 	}
-	role := rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      FORMOL_SIDECAR_ROLE,
-		},
+	clusterRoleBinding := rbacv1.ClusterRoleBinding{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: r.Namespace,
+		Name:      FORMOL_SIDECAR_CLUSTERROLEBINDING,
+	}, &clusterRoleBinding); err == nil {
+		if err = r.Delete(r.Context, &clusterRoleBinding); err != nil {
+			r.Log.Error(err, "unable to delete sidecar cluster role binding")
+		}
 	}
-	if err := r.Delete(r.Context, &role); err != nil {
-		r.Log.Error(err, "unable to delete sidecar role")
+	clusterRole := rbacv1.ClusterRole{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: r.Namespace,
+		Name:      FORMOL_SIDECAR_CLUSTERROLE,
+	}, &clusterRole); err == nil {
+		if err = r.Delete(r.Context, &clusterRole); err != nil {
+			r.Log.Error(err, "unable to delete sidecar cluster role")
+		}
 	}
-	clusterRoleBinding := rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      FORMOL_SIDECAR_CLUSTERROLE,
-		},
+	return nil
+}
+
+func (r *BackupConfigurationReconciler) createBSCreatorRBAC() error {
+	sa := corev1.ServiceAccount{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: r.Namespace,
+		Name:      FORMOL_BS_CREATOR_SA,
+	}, &sa); errors.IsNotFound(err) {
+		sa = corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: r.Namespace,
+				Name:      FORMOL_BS_CREATOR_SA,
+			},
+		}
+		if err = r.Create(r.Context, &sa); err != nil {
+			r.Log.Error(err, "unable to create BS creator SA")
+			return err
+		}
 	}
-	if err := r.Delete(r.Context, &clusterRoleBinding); err != nil {
-		r.Log.Error(err, "unable to delete sidecar clusterRole binding")
+	role := rbacv1.Role{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: r.Namespace,
+		Name:      FORMOL_BS_CREATOR_ROLE,
+	}, &role); errors.IsNotFound(err) {
+		role = rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: r.Namespace,
+				Name:      FORMOL_BS_CREATOR_ROLE,
+			},
+			Rules: []rbacv1.PolicyRule{
+				rbacv1.PolicyRule{
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					APIGroups: []string{"formol.desmojim.fr"},
+					Resources: []string{"backupsessions"},
+				},
+			},
+		}
+		r.Log.V(0).Info("Creating formol bs creator role", "role", role)
+		if err = r.Create(r.Context, &role); err != nil {
+			r.Log.Error(err, "unable to create bs creator role")
+			return err
+		}
 	}
-	clusterRole := rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      FORMOL_SIDECAR_CLUSTERROLE,
-		},
-	}
-	if err := r.Delete(r.Context, &clusterRole); err != nil {
-		r.Log.Error(err, "unable to delete sidecar clusterRole")
+	rolebinding := rbacv1.RoleBinding{}
+	if err := r.Get(r.Context, client.ObjectKey{
+		Namespace: r.Namespace,
+		Name:      FORMOL_BS_CREATOR_ROLEBINDING,
+	}, &rolebinding); errors.IsNotFound(err) {
+		rolebinding = rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: r.Namespace,
+				Name:      FORMOL_BS_CREATOR_ROLEBINDING,
+			},
+			Subjects: []rbacv1.Subject{
+				rbacv1.Subject{
+					Kind: "ServiceAccount",
+					Name: FORMOL_BS_CREATOR_SA,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     FORMOL_BS_CREATOR_ROLE,
+			},
+		}
+		r.Log.V(0).Info("Creating formol bs creator rolebinding", "rolebinding", rolebinding)
+		if err = r.Create(r.Context, &rolebinding); err != nil {
+			r.Log.Error(err, "unable to create bs creator rolebinding")
+			return err
+		}
 	}
 	return nil
 }
 
 // Creates a role to allow the BackupSession controller in the sidecar to have access to resources
 // like Repo, Functions, ...
-func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccount) error {
-	if sa.Name == "" {
-		sa.Name = "default"
+func (r *BackupConfigurationReconciler) createSidecarRBAC(podSpec *corev1.PodSpec) error {
+	sa := podSpec.ServiceAccountName
+	if sa == "" {
+		sa = "default"
 	}
 	role := rbacv1.Role{}
 	if err := r.Get(r.Context, client.ObjectKey{
-		Namespace: sa.Namespace,
+		Namespace: r.Namespace,
 		Name:      FORMOL_SIDECAR_ROLE,
-	}, &role); err != nil && errors.IsNotFound(err) {
+	}, &role); errors.IsNotFound(err) {
 		role = rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: sa.Namespace,
+				Namespace: r.Namespace,
 				Name:      FORMOL_SIDECAR_ROLE,
 			},
 			Rules: []rbacv1.PolicyRule{
@@ -405,18 +472,18 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 	}
 	rolebinding := rbacv1.RoleBinding{}
 	if err := r.Get(r.Context, client.ObjectKey{
-		Namespace: sa.Namespace,
-		Name:      FORMOL_SIDECAR_ROLE,
-	}, &rolebinding); err != nil && errors.IsNotFound(err) {
+		Namespace: r.Namespace,
+		Name:      FORMOL_SIDECAR_ROLEBINDING,
+	}, &rolebinding); errors.IsNotFound(err) {
 		rolebinding = rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: sa.Namespace,
-				Name:      FORMOL_SIDECAR_ROLE,
+				Namespace: r.Namespace,
+				Name:      FORMOL_SIDECAR_ROLEBINDING,
 			},
 			Subjects: []rbacv1.Subject{
 				rbacv1.Subject{
 					Kind: "ServiceAccount",
-					Name: sa.Name,
+					Name: sa,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
@@ -430,11 +497,25 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 			r.Log.Error(err, "unable to create sidecar rolebinding")
 			return err
 		}
+	} else {
+		if err != nil {
+			r.Log.Error(err, "something went very wrong here")
+			return err
+		}
+		rolebinding.Subjects = append(rolebinding.Subjects, rbacv1.Subject{
+			Kind: "ServiceAccount",
+			Name: sa,
+		})
+		r.Log.V(0).Info("Updating formol sidecar rolebinding with the new SA", "rolebinding", rolebinding)
+		if err = r.Update(r.Context, &rolebinding); err != nil {
+			r.Log.Error(err, "unable to update sidecar rolebinding")
+			return err
+		}
 	}
 	clusterRole := rbacv1.ClusterRole{}
 	if err := r.Get(r.Context, client.ObjectKey{
 		Name: FORMOL_SIDECAR_CLUSTERROLE,
-	}, &clusterRole); err != nil && errors.IsNotFound(err) {
+	}, &clusterRole); errors.IsNotFound(err) {
 		clusterRole = rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: FORMOL_SIDECAR_CLUSTERROLE,
@@ -460,18 +541,18 @@ func (r *BackupConfigurationReconciler) createRBACSidecar(sa corev1.ServiceAccou
 	}
 	clusterRolebinding := rbacv1.ClusterRoleBinding{}
 	if err := r.Get(r.Context, client.ObjectKey{
-		Namespace: sa.Namespace,
-		Name:      FORMOL_SIDECAR_CLUSTERROLE,
-	}, &clusterRolebinding); err != nil && errors.IsNotFound(err) {
+		Namespace: r.Namespace,
+		Name:      FORMOL_SIDECAR_CLUSTERROLEBINDING,
+	}, &clusterRolebinding); errors.IsNotFound(err) {
 		clusterRolebinding = rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: FORMOL_SIDECAR_CLUSTERROLE,
+				Name: FORMOL_SIDECAR_CLUSTERROLEBINDING,
 			},
 			Subjects: []rbacv1.Subject{
 				rbacv1.Subject{
 					Kind:      "ServiceAccount",
-					Name:      sa.Name,
-					Namespace: sa.Namespace,
+					Name:      sa,
+					Namespace: r.Namespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
