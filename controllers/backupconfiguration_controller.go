@@ -49,7 +49,7 @@ type BackupConfigurationReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=volumesnapshotclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
