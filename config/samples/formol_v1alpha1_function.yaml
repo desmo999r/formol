@@ -1,11 +1,12 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: Function
 metadata:
-  name: function-backup-pvc
-  namespace: backup
+  labels:
+    app.kubernetes.io/name: function
+    app.kubernetes.io/instance: function-sample
+    app.kubernetes.io/part-of: formol
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: formol
+  name: function-sample
 spec:
-  name: function-backup-pvc
-  image: desmo999r/formolcli
-  args:
-    - backup
-    - volume
+  # TODO(user): Add fields here

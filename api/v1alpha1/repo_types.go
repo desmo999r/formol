@@ -1,5 +1,5 @@
 /*
-
+Copyright 2023.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +17,18 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	RESTIC_REPO_VOLUME    = "restic-volume"
+	RESTIC_REPO_PATH      = "/restic-repo"
+	RESTIC_REPOSITORY     = "RESTIC_REPOSITORY"
+	RESTIC_PASSWORD       = "RESTIC_PASSWORD"
+	AWS_ACCESS_KEY_ID     = "AWS_ACCESS_KEY_ID"
+	AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
+)
 
 type S3 struct {
 	Server string `json:"server"`
@@ -30,27 +37,30 @@ type S3 struct {
 	Prefix string `json:"prefix,omitempty"`
 }
 
+type Local struct {
+	//corev1.VolumeSource `json:"source"`
+	corev1.VolumeSource `json:",inline"`
+}
+
 type Backend struct {
-	S3 `json:"s3"`
+	// +optional
+	S3 *S3 `json:"s3,omitempty"`
+	// +optional
+	Local *Local `json:"local,omitempty"`
 }
 
 // RepoSpec defines the desired state of Repo
 type RepoSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Repo. Edit Repo_types.go to remove/update
 	Backend           `json:"backend"`
 	RepositorySecrets string `json:"repositorySecrets"`
 }
 
 // RepoStatus defines the observed state of Repo
 type RepoStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 
 // Repo is the Schema for the repoes API
 type Repo struct {
@@ -61,7 +71,7 @@ type Repo struct {
 	Status RepoStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
 // RepoList contains a list of Repo
 type RepoList struct {

@@ -1,0 +1,31 @@
+# permissions for end users to edit restoresessions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: restoresession-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: formol
+    app.kubernetes.io/part-of: formol
+    app.kubernetes.io/managed-by: kustomize
+  name: restoresession-editor-role
+rules:
+- apiGroups:
+  - formol.desmojim.fr
+  resources:
+  - restoresessions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - formol.desmojim.fr
+  resources:
+  - restoresessions/status
+  verbs:
+  - get

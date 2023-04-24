@@ -1,17 +1,12 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: BackupConfiguration
 metadata:
-  name: backupconf-nginx
+  labels:
+    app.kubernetes.io/name: backupconfiguration
+    app.kubernetes.io/instance: backupconfiguration-sample
+    app.kubernetes.io/part-of: formol
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: formol
+  name: backupconfiguration-sample
 spec:
-  repository:
-    name: repo-minio
-  schedule: "*/1 * * * *"
-  target:
-    apiVersion: v1
-    kind: Deployment
-    name: nginx-deployment
-  volumeMounts:
-    - name: empty
-      mountPath: /data
-  paths:
-    - /data
+  # TODO(user): Add fields here
