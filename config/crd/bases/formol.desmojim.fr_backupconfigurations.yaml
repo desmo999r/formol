@@ -127,7 +127,6 @@ spec:
                             type: array
                         required:
                         - name
-                        - sharePath
                         type: object
                       type: array
                     retry:
@@ -146,7 +145,6 @@ spec:
                   required:
                   - backupType
                   - containers
-                  - retry
                   - targetKind
                   - targetName
                   type: object
