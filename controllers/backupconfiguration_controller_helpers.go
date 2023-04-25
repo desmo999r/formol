@@ -209,15 +209,6 @@ func (r *BackupConfigurationReconciler) DeleteSidecar(backupConf formolv1alpha1.
 	return nil
 }
 
-func hasSidecar(podSpec *corev1.PodSpec) bool {
-	for _, container := range podSpec.Containers {
-		if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.BackupConfiguration, target formolv1alpha1.Target) (err error) {
 	repo := formolv1alpha1.Repo{}
 	if err = r.Get(r.Context, client.ObjectKey{
@@ -228,7 +219,6 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 		return err
 	}
 	r.Log.V(1).Info("Got Repository", "repo", repo)
-	sidecar := formolv1alpha1.GetSidecar(backupConf, target)
 	targetObject, targetPodSpec := formolv1alpha1.GetTargetObjects(target.TargetKind)
 	if err := r.Get(r.Context, client.ObjectKey{
 		Namespace: backupConf.Namespace,
@@ -237,7 +227,26 @@ func (r *BackupConfigurationReconciler) addSidecar(backupConf formolv1alpha1.Bac
 		r.Log.Error(err, "cannot get target", "target", target.TargetName)
 		return err
 	}
-	if !hasSidecar(targetPodSpec) {
+	hasSidecar := func(podSpec *corev1.PodSpec) int {
+		for i, container := range podSpec.Containers {
+			if container.Name == formolv1alpha1.SIDECARCONTAINER_NAME {
+				return i
+			}
+		}
+		return -1
+	}
+	if res := hasSidecar(targetPodSpec); res != -1 {
+		if targetPodSpec.Containers[res].Image != backupConf.Spec.Image {
+			r.Log.V(0).Info("New sidecar image. Updating pod", "old", targetPodSpec.Containers[res].Image, "new", backupConf.Spec.Image)
+			targetPodSpec.Containers[res].Image = backupConf.Spec.Image
+			if err = r.Update(r.Context, targetObject); err != nil {
+				r.Log.Error(err, "unable to update targetObject", "targetObject", targetObject)
+				return
+			}
+			return
+		}
+	} else {
+		sidecar := formolv1alpha1.GetSidecar(backupConf, target)
 		if err = r.createSidecarRBAC(targetPodSpec); err != nil {
 			r.Log.Error(err, "unable to create RBAC for the sidecar container")
 			return
