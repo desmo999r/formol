@@ -1,11 +1,12 @@
 apiVersion: formol.desmojim.fr/v1alpha1
 kind: Repo
 metadata:
-  name: repo-minio
-  namespace: backup
+  labels:
+    app.kubernetes.io/name: repo
+    app.kubernetes.io/instance: repo-sample
+    app.kubernetes.io/part-of: formol
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: formol
+  name: repo-sample
 spec:
-  backend:
-    s3:
-      server: raid5.desmojim.fr:9000
-      bucket: testbucket2
-  repositorySecrets: secret-minio
+  # TODO(user): Add fields here

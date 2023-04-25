@@ -1,0 +1,32 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: regcred
+  namespace: demo
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOnsidXNlcm5hbWUiOiJkZXNtbzk5OXIiLCJwYXNzd29yZCI6IlU5QXNlVGF5cUY5UlJCd0l2Q1k0IiwiZW1haWwiOiJqZWFubWFyYy5qaW0uYW5kcmVAZ21haWwuY29tIiwiYXV0aCI6IlpHVnpiVzg1T1RseU9sVTVRWE5sVkdGNWNVWTVVbEpDZDBsMlExazAifX19
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: demo
+  name: with-envfrom-secret
+data:
+  title: dmVyeXNlY3JldA==
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-minio
+  namespace: demo
+data:
+  RESTIC_PASSWORD: bHIyOXhtOTU=
+  AWS_ACCESS_KEY_ID: SjV4V2NqQ2RzckxpZ2lEZA==
+  AWS_SECRET_ACCESS_KEY: OVdBMnN1djVtanRLRTdnMkRjNWl5WWtkbDNobGV5UU8=

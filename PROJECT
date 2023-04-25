@@ -1,0 +1,50 @@
+domain: desmojim.fr
+layout:
+- go.kubebuilder.io/v3
+projectName: formol
+repo: github.com/desmo999r/formol
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: desmojim.fr
+  group: formol
+  kind: BackupConfiguration
+  path: github.com/desmo999r/formol/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: desmojim.fr
+  group: formol
+  kind: BackupSession
+  path: github.com/desmo999r/formol/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: desmojim.fr
+  group: formol
+  kind: RestoreSession
+  path: github.com/desmo999r/formol/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: desmojim.fr
+  group: formol
+  kind: Function
+  path: github.com/desmo999r/formol/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: desmojim.fr
+  group: formol
+  kind: Repo
+  path: github.com/desmo999r/formol/api/v1alpha1
+  version: v1alpha1
+version: "3"

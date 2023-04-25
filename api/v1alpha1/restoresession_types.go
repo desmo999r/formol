@@ -1,5 +1,5 @@
 /*
-
+Copyright 2023.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,33 +20,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type BackupSessionRef struct {
+	Spec   BackupSessionSpec   `json:"spec"`
+	Status BackupSessionStatus `json:"status"`
+}
 
 // RestoreSessionSpec defines the desired state of RestoreSession
 type RestoreSessionSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	BackupSessionRef metav1.ObjectMeta `json:"backupSessionRef"`
+	BackupSessionRef `json:"backupSession"`
 }
 
 // RestoreSessionStatus defines the observed state of RestoreSession
 type RestoreSessionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// +optional
 	SessionState `json:"state,omitempty"`
-	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-	// +optional
-	Targets []TargetStatus `json:"target,omitempty"`
+	StartTime    *metav1.Time   `json:"startTime,omitempty"`
+	Targets      []TargetStatus `json:"targets,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName="rs"
-// +kubebuilder:subresource:status
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 
 // RestoreSession is the Schema for the restoresessions API
 type RestoreSession struct {
@@ -57,7 +49,7 @@ type RestoreSession struct {
 	Status RestoreSessionStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
 // RestoreSessionList contains a list of RestoreSession
 type RestoreSessionList struct {
